@@ -243,7 +243,7 @@ def compute_embedding(text: str, model_name: Optional[str] = None):
     return np.array(embedding, dtype=np.float32)
 
 
-def extract_units_from_project(project_path: str, lang: str = "python") -> List[EmbeddingUnit]:
+def extract_units_from_project(project_path: str, lang: str = "python", respect_ignore: bool = True) -> List[EmbeddingUnit]:
     """Extract all functions/methods/classes from a project.
 
     Uses existing TLDR APIs:
@@ -255,17 +255,27 @@ def extract_units_from_project(project_path: str, lang: str = "python") -> List[
     Args:
         project_path: Path to project root.
         lang: Programming language ("python", "typescript", "go", "rust").
+        respect_ignore: If True, respect .tldrignore patterns (default True).
 
     Returns:
         List of EmbeddingUnit objects with enriched metadata.
     """
     from tldr.api import get_code_structure, build_project_call_graph, get_imports
+    from tldr.tldrignore import load_ignore_patterns, should_ignore
 
     project = Path(project_path).resolve()
     units = []
 
     # Get code structure (L1)
     structure = get_code_structure(str(project), language=lang)
+
+    # Filter ignored files
+    if respect_ignore:
+        spec = load_ignore_patterns(project)
+        structure["files"] = [
+            f for f in structure.get("files", [])
+            if not should_ignore(project / f.get("path", ""), project, spec)
+        ]
 
     # Build call graph (L2)
     try:
@@ -604,6 +614,7 @@ def build_semantic_index(
     lang: str = "python",
     model: Optional[str] = None,
     show_progress: bool = True,
+    respect_ignore: bool = True,
 ) -> int:
     """Build and save FAISS index + metadata for a project.
 
@@ -616,14 +627,22 @@ def build_semantic_index(
         lang: Programming language.
         model: Model name from SUPPORTED_MODELS or HuggingFace name.
         show_progress: Show progress spinner (default: True).
+        respect_ignore: If True, respect .tldrignore patterns (default True).
 
     Returns:
         Number of indexed units.
     """
     import faiss
     import numpy as np
+    from tldr.tldrignore import ensure_tldrignore
 
     console = _get_progress_console() if show_progress else None
+
+    # Ensure .tldrignore exists (create with defaults if not)
+    project = Path(project_path).resolve()
+    created, message = ensure_tldrignore(project)
+    if created and console:
+        console.print(f"[yellow]{message}[/yellow]")
 
     # Resolve model name early to get HF name for metadata
     model_key = model if model else DEFAULT_MODEL
@@ -632,17 +651,16 @@ def build_semantic_index(
     else:
         hf_name = model_key
 
-    project = Path(project_path).resolve()
     cache_dir = project / ".tldr" / "cache" / "semantic"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    # Extract all units
+    # Extract all units (respecting .tldrignore)
     if console:
         with console.status("[bold green]Extracting code units...") as status:
-            units = extract_units_from_project(str(project), lang=lang)
+            units = extract_units_from_project(str(project), lang=lang, respect_ignore=respect_ignore)
             status.update(f"[bold green]Extracted {len(units)} code units")
     else:
-        units = extract_units_from_project(str(project), lang=lang)
+        units = extract_units_from_project(str(project), lang=lang, respect_ignore=respect_ignore)
 
     if not units:
         return 0

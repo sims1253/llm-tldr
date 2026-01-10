@@ -784,7 +784,8 @@ Semantic Search:
             from .semantic import build_semantic_index, semantic_search
 
             if args.action == "index":
-                count = build_semantic_index(args.path, lang=args.lang, model=args.model)
+                respect_ignore = not getattr(args, 'no_ignore', False)
+                count = build_semantic_index(args.path, lang=args.lang, model=args.model, respect_ignore=respect_ignore)
                 print(f"Indexed {count} code units")
 
             elif args.action == "search":
