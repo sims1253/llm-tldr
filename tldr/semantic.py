@@ -400,7 +400,7 @@ def _parse_file_ast(file_path: Path, lang: str) -> dict:
                     # Extract code preview (first 10 lines of body)
                     start_line = node.lineno
                     end_line = getattr(node, 'end_lineno', start_line + 10)
-                    body_lines = lines[start_line:min(end_line, start_line + 10)]
+                    body_lines = lines[start_line - 1:min(end_line, start_line + 10) - 1]
                     code_preview = '\n'.join(body_lines[:10])
 
                     if parent_class:
@@ -606,7 +606,7 @@ def _process_file_for_extraction(
                     # Extract code preview (first 10 lines of body)
                     start_line = node.lineno
                     end_line = getattr(node, 'end_lineno', start_line + 10)
-                    body_lines = lines[start_line:min(end_line, start_line + 10)]
+                    body_lines = lines[start_line - 1:min(end_line, start_line + 10) - 1]
                     code_preview = '\n'.join(body_lines[:10])
 
                     # Build signature
