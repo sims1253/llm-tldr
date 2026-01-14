@@ -3176,14 +3176,17 @@ class HybridExtractor:
         """Detect language from file extension."""
         ext_map = {
             ".py": "python", ".pyx": "python", ".pyi": "python",
-            ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
+            ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
             ".ts": "typescript", ".tsx": "typescript",
             ".go": "go", ".rs": "rust", ".rb": "ruby",
-            ".java": "java", ".kt": "kotlin",
-            ".c": "c", ".h": "c", ".cpp": "cpp", ".hpp": "cpp",
+            ".java": "java", ".kt": "kotlin", ".kts": "kotlin",
+            ".c": "c", ".h": "c",
+            ".cpp": "cpp", ".hpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hh": "cpp",
             ".cs": "csharp", ".swift": "swift",
             ".scala": "scala", ".sc": "scala",
             ".lua": "lua", ".luau": "luau",
+            ".ex": "elixir", ".exs": "elixir",
+            ".php": "php",
         }
         return ext_map.get(file_path.suffix.lower(), "unknown")
 
