@@ -23,7 +23,7 @@ from typing import List, Optional, Tuple, Dict, Any
 
 logger = logging.getLogger("tldr.semantic")
 
-ALL_LANGUAGES = ["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir"]
+ALL_LANGUAGES = ["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "r"]
 
 # Lazy imports for heavy dependencies
 _model = None
@@ -906,6 +906,8 @@ def _detect_project_languages(project_path: Path, respect_ignore: bool = True) -
         '.luau': 'luau',
         '.ex': 'elixir',
         '.exs': 'elixir',
+        '.r': 'r',
+        '.R': 'r',
     }
 
     found_languages = set()

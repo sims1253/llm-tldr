@@ -70,6 +70,8 @@ EXTENSION_TO_LANGUAGE = {
     '.luau': 'luau',
     '.ex': 'elixir',
     '.exs': 'elixir',
+    '.r': 'r',
+    '.R': 'r',
 }
 
 
@@ -195,7 +197,7 @@ Semantic Search:
         "--lang",
         default="auto",
         choices=["auto", "all", "python", "typescript", "javascript", "go", "rust", "java", "c",
-                 "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir"],
+                 "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "r"],
         help="Language to analyze (auto=use cached, all=detect all)",
     )
     struct_p.add_argument(
@@ -234,7 +236,7 @@ Semantic Search:
         "--lang",
         default="python",
         choices=["python", "typescript", "javascript", "go", "rust", "java", "c",
-                 "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir"],
+                 "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "r"],
         help="Language",
     )
 
@@ -361,7 +363,7 @@ Semantic Search:
     warm_p.add_argument(
         "--lang",
         default="all",
-        choices=["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "all"],
+        choices=["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "r", "all"],
         help="Language (default: auto-detect all)",
     )
 
@@ -377,7 +379,7 @@ Semantic Search:
     index_p.add_argument(
         "--lang",
         default="python",
-        choices=["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "all"],
+        choices=["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "r", "all"],
         help="Language (use 'all' for multi-language)",
     )
     index_p.add_argument(
@@ -700,8 +702,14 @@ Semantic Search:
             print(json.dumps(result, indent=2))
 
         elif args.command == "context":
+            # Auto-detect language from cache if not specified
+            lang = args.lang
+            if lang == "python":  # Default value - try to auto-detect
+                cached = get_cached_languages(args.project)
+                if cached and cached[0] != "python":
+                    lang = cached[0]
             ctx = get_relevant_context(
-                args.project, args.entry, depth=args.depth, language=args.lang
+                args.project, args.entry, depth=args.depth, language=lang
             )
             # Output LLM-ready string directly
             print(ctx.to_llm_string())

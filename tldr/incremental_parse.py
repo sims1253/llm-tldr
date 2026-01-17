@@ -497,6 +497,11 @@ def _get_parser(language: str) -> Optional[Any]:
             parser.language = Language(tree_sitter_elixir.language())
         else:
             return None
+    elif language == "r":
+        if TREE_SITTER_R_AVAILABLE:
+            parser.language = Language(tree_sitter_r.language())
+        else:
+            return None
     else:
         return None
 
@@ -512,7 +517,7 @@ class IncrementalParser:
     SUPPORTED_LANGUAGES = {
         "typescript", "tsx", "javascript", "python", "go", "rust",
         "lua", "luau", "java", "c", "cpp", "ruby", "php", "csharp",
-        "kotlin", "scala", "elixir"
+        "kotlin", "scala", "elixir", "r"
     }
 
     def __init__(self, cache_dir: Optional[Path] = None):

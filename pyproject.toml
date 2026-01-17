@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "llm-tldr"
 version = "1.5.2"
-description = "Token-efficient code analysis for LLMs. 5-layer stack: AST, Call Graph, CFG, DFG, PDG. 95% token savings. 17 languages."
+description = "Token-efficient code analysis for LLMs. 5-layer stack: AST, Call Graph, CFG, DFG, PDG. 95% token savings. 18 languages."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "AGPL-3.0"}
@@ -74,6 +74,10 @@ dev = [
     "mypy>=0.900",
     "rich>=13.0",
     "shtab>=1.7.0",
+]
+r = [
+    # tree-sitter-r is not on PyPI yet, installed from git
+    "tree-sitter-r @ git+https://github.com/r-lib/tree-sitter-r.git@v1.2.0",
 ]
 
 [project.urls]

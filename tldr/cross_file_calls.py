@@ -133,6 +133,14 @@ try:
 except ImportError:
     pass
 
+# Tree-sitter support for R
+TREE_SITTER_R_AVAILABLE = False
+try:
+    import tree_sitter_r
+    TREE_SITTER_R_AVAILABLE = True
+except ImportError:
+    pass
+
 
 @dataclass
 class ProjectCallGraph:
@@ -335,6 +343,8 @@ def scan_project(
         extensions = {'.luau'}
     elif language == "elixir":
         extensions = {'.ex', '.exs'}
+    elif language == "r":
+        extensions = {'.r', '.R', '.Rmd', '.rmd'}
     else:
         raise ValueError(f"Unsupported language: {language}")
 
@@ -1888,6 +1898,125 @@ def _parse_csharp_using_node(node, source: bytes) -> dict | None:
     return result
 
 
+def _get_r_parser():
+    """Get or create a tree-sitter R parser."""
+    if not TREE_SITTER_R_AVAILABLE:
+        raise RuntimeError("tree-sitter-r not available")
+
+    import tree_sitter
+    r_lang = tree_sitter.Language(tree_sitter_r.language())
+    parser = tree_sitter.Parser(r_lang)
+    return parser
+
+
+def parse_r_imports(file_path: str | Path) -> list[dict]:
+    """
+    Extract library/require/source statements from an R file.
+
+    Args:
+        file_path: Path to R file
+
+    Returns:
+        List of import info dicts with keys: module, is_source
+        - library(dplyr) -> module='dplyr', is_source=False
+        - require(ggplot2) -> module='ggplot2', is_source=False
+        - source("utils.R") -> module='utils.R', is_source=True
+    """
+    if not TREE_SITTER_R_AVAILABLE:
+        return []
+
+    file_path = Path(file_path)
+    try:
+        source = file_path.read_bytes()
+        parser = _get_r_parser()
+        tree = parser.parse(source)
+    except (FileNotFoundError, Exception):
+        return []
+
+    imports = []
+
+    def walk_tree(node):
+        if node.type == "call":
+            import_info = _parse_r_import_node(node, source)
+            if import_info:
+                imports.append(import_info)
+        for child in node.children:
+            walk_tree(child)
+
+    walk_tree(tree.root_node)
+    return imports
+
+
+def _parse_r_import_node(node, source: bytes) -> dict | None:
+    """Parse an R library(), require(), or source() call.
+
+    R import patterns:
+    - library(dplyr) or library("dplyr")
+    - require(ggplot2) or require("ggplot2")
+    - source("utils.R")
+    - requireNamespace("pkg")
+    - loadNamespace("pkg")
+    """
+    if node.type != "call":
+        return None
+
+    # Get the function being called
+    func_name = None
+    arguments = None
+
+    for child in node.children:
+        if child.type == "identifier":
+            func_name = source[child.start_byte:child.end_byte].decode("utf-8")
+        elif child.type == "arguments":
+            arguments = child
+
+    if not func_name or func_name not in ("library", "require", "source", "requireNamespace", "loadNamespace"):
+        return None
+
+    if not arguments:
+        return None
+
+    # Get the package/file name from arguments
+    package_name = None
+    for arg in arguments.children:
+        if arg.type == "argument":
+            # Named or unnamed argument
+            for arg_child in arg.children:
+                if arg_child.type == "identifier":
+                    package_name = source[arg_child.start_byte:arg_child.end_byte].decode("utf-8")
+                    break
+                elif arg_child.type == "string":
+                    text = source[arg_child.start_byte:arg_child.end_byte].decode("utf-8")
+                    # Strip quotes
+                    if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+                        package_name = text[1:-1]
+                    else:
+                        package_name = text
+                    break
+            if package_name:
+                break
+        elif arg.type == "identifier":
+            # Direct identifier: library(dplyr)
+            package_name = source[arg.start_byte:arg.end_byte].decode("utf-8")
+            break
+        elif arg.type == "string":
+            # Direct string: library("dplyr")
+            text = source[arg.start_byte:arg.end_byte].decode("utf-8")
+            if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+                package_name = text[1:-1]
+            else:
+                package_name = text
+            break
+
+    if not package_name:
+        return None
+
+    return {
+        'module': package_name,
+        'is_source': func_name == "source",
+    }
+
+
 def build_function_index(
     root: str | Path,
     language: str = "python",
@@ -1933,6 +2062,8 @@ def build_function_index(
             _index_c_file(src_path, rel_path, module_name, simple_module, index)
         elif language == "php":
             _index_php_file(src_path, rel_path, module_name, simple_module, index)
+        elif language == "r":
+            _index_r_file(src_path, rel_path, module_name, simple_module, index)
 
     return index
 
@@ -2383,6 +2514,50 @@ def _index_php_file(src_path: Path, rel_path: Path, module_name: str, simple_mod
         elif node.type == "function_definition":
             name = _get_php_node_name(node, source)
             if name:
+                add_to_index(name)
+
+        for child in node.children:
+            walk_tree(child)
+
+    walk_tree(tree.root_node)
+
+
+def _index_r_file(src_path: Path, rel_path: Path, module_name: str, simple_module: str, index: dict):
+    """Index functions from an R file."""
+    if not TREE_SITTER_R_AVAILABLE:
+        return
+
+    try:
+        source = src_path.read_bytes()
+        parser = _get_r_parser()
+        tree = parser.parse(source)
+    except (FileNotFoundError, Exception):
+        return
+
+    def add_to_index(name: str):
+        """Helper to add a name to the index."""
+        index[(module_name, name)] = str(rel_path)
+        index[(simple_module, name)] = str(rel_path)
+
+    def walk_tree(node):
+        # Function assignment: foo <- function(x) { ... }
+        if node.type == "binary_operator":
+            # Check if this is a function assignment
+            name = None
+            is_func = False
+            children = list(node.children)
+
+            for i, child in enumerate(children):
+                child_text = source[child.start_byte:child.end_byte].decode("utf-8")
+                if child.type == "identifier" and name is None:
+                    name = child_text
+                elif child_text in ("<-", "=", "<<-", ":="):
+                    if i > 0 and children[0].type == "identifier":
+                        name = source[children[0].start_byte:children[0].end_byte].decode("utf-8")
+                elif child.type == "function_definition":
+                    is_func = True
+
+            if name and is_func:
                 add_to_index(name)
 
         for child in node.children:
@@ -3311,6 +3486,8 @@ def build_project_call_graph(
         _build_c_call_graph(root, graph, func_index, workspace_config)
     elif language == "php":
         _build_php_call_graph(root, graph, func_index, workspace_config)
+    elif language == "r":
+        _build_r_call_graph(root, graph, func_index, workspace_config)
 
     return graph
 
@@ -3939,3 +4116,186 @@ def _build_php_call_graph(
                                     if name == method:
                                         graph.add_edge(rel_path, caller_func, file_path, method)
                                         break
+
+
+def _build_r_call_graph(
+    root: Path,
+    graph: ProjectCallGraph,
+    func_index: dict,
+    workspace_config: Optional[WorkspaceConfig] = None
+):
+    """Build call graph for R files."""
+    if not TREE_SITTER_R_AVAILABLE:
+        return
+
+    for r_file in scan_project(root, "r", workspace_config):
+        r_path = Path(r_file)
+        rel_path = str(r_path.relative_to(root))
+
+        # Get imports for this file
+        imports = parse_r_imports(r_path)
+
+        # Build import resolution map
+        # In R, library() and require() load packages into the search path
+        # source() loads another R file
+        loaded_packages = set()
+        sourced_files = []
+
+        for imp in imports:
+            if imp.get('is_source'):
+                # source("file.R") - direct file inclusion
+                sourced_files.append(imp['module'])
+            else:
+                # library(pkg) or require(pkg) - package loading
+                loaded_packages.add(imp['module'])
+
+        # Get calls from this file
+        calls_by_func = _extract_r_file_calls(r_path, root)
+
+        for caller_func, calls in calls_by_func.items():
+            for call_type, call_target in calls:
+                if call_type == 'intra':
+                    # Same file call
+                    graph.add_edge(rel_path, caller_func, rel_path, call_target)
+
+                elif call_type == 'direct':
+                    # Direct function call - could be from loaded package or sourced file
+                    # First check if it's defined in a sourced file
+                    found = False
+                    for sourced in sourced_files:
+                        # Try to find the sourced file
+                        sourced_path = (r_path.parent / sourced).resolve()
+                        if sourced_path.exists():
+                            sourced_rel = str(sourced_path.relative_to(root))
+                            key = (Path(sourced_rel).stem, call_target)
+                            if key in func_index:
+                                graph.add_edge(rel_path, caller_func, sourced_rel, call_target)
+                                found = True
+                                break
+
+                    if not found:
+                        # Try to find in any project file
+                        for key, file_path in func_index.items():
+                            if isinstance(key, tuple) and len(key) == 2:
+                                _, name = key
+                                if name == call_target:
+                                    graph.add_edge(rel_path, caller_func, file_path, call_target)
+                                    break
+
+                elif call_type == 'namespaced':
+                    # package::function() call
+                    parts = call_target.split('::', 1)
+                    if len(parts) == 2:
+                        pkg, func = parts
+                        # Look for the function in the func_index
+                        for key, file_path in func_index.items():
+                            if isinstance(key, tuple) and len(key) == 2:
+                                _, name = key
+                                if name == func:
+                                    graph.add_edge(rel_path, caller_func, file_path, func)
+                                    break
+
+
+def _extract_r_file_calls(file_path: Path, root: Path) -> dict[str, list[tuple[str, str]]]:
+    """Extract function calls from an R file, organized by caller function.
+
+    Returns:
+        Dict mapping function names to lists of (call_type, target) tuples.
+        call_type is one of: 'intra' (same file), 'direct', 'namespaced'
+    """
+    if not TREE_SITTER_R_AVAILABLE:
+        return {}
+
+    try:
+        source = file_path.read_bytes()
+        parser = _get_r_parser()
+        tree = parser.parse(source)
+    except (FileNotFoundError, Exception):
+        return {}
+
+    calls_by_func: dict[str, list[tuple[str, str]]] = {}
+
+    # First pass: collect all function definitions in this file
+    defined_funcs = set()
+
+    def collect_definitions(node):
+        if node.type == "binary_operator":
+            # Check for function assignment: name <- function(...)
+            children = list(node.children)
+            name = None
+            is_func = False
+            for i, child in enumerate(children):
+                child_text = source[child.start_byte:child.end_byte].decode("utf-8")
+                if child.type == "identifier" and name is None:
+                    name = child_text
+                elif child_text in ("<-", "=", "<<-", ":="):
+                    if i > 0 and children[0].type == "identifier":
+                        name = source[children[0].start_byte:children[0].end_byte].decode("utf-8")
+                elif child.type == "function_definition":
+                    is_func = True
+            if name and is_func:
+                defined_funcs.add(name)
+
+        for child in node.children:
+            collect_definitions(child)
+
+    collect_definitions(tree.root_node)
+
+    # Second pass: extract calls from each function
+    def extract_calls_from_node(func_node, func_name: str) -> list[tuple[str, str]]:
+        """Extract all calls from a function body."""
+        calls = []
+
+        def visit_calls(node):
+            if node.type == "call":
+                # Get the function being called
+                callee = None
+                for child in node.children:
+                    if child.type == "identifier":
+                        callee = source[child.start_byte:child.end_byte].decode("utf-8")
+                        break
+                    elif child.type == "namespace_operator":
+                        # package::function
+                        callee = source[child.start_byte:child.end_byte].decode("utf-8")
+                        break
+
+                if callee:
+                    if "::" in callee:
+                        calls.append(('namespaced', callee))
+                    elif callee in defined_funcs:
+                        calls.append(('intra', callee))
+                    else:
+                        calls.append(('direct', callee))
+
+            for child in node.children:
+                visit_calls(child)
+
+        visit_calls(func_node)
+        return calls
+
+    # Third pass: visit each function definition and extract its calls
+    def process_functions(node):
+        if node.type == "binary_operator":
+            # Check for function assignment
+            children = list(node.children)
+            name = None
+            func_node = None
+            for i, child in enumerate(children):
+                child_text = source[child.start_byte:child.end_byte].decode("utf-8")
+                if child.type == "identifier" and name is None:
+                    name = child_text
+                elif child_text in ("<-", "=", "<<-", ":="):
+                    if i > 0 and children[0].type == "identifier":
+                        name = source[children[0].start_byte:children[0].end_byte].decode("utf-8")
+                elif child.type == "function_definition":
+                    func_node = child
+
+            if name and func_node:
+                calls = extract_calls_from_node(func_node, name)
+                calls_by_func[name] = calls
+
+        for child in node.children:
+            process_functions(child)
+
+    process_functions(tree.root_node)
+    return calls_by_func

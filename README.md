@@ -276,9 +276,11 @@ The bug is obvious. Line 28 uses `user` without going through the null check pat
 
 ## Supported Languages
 
-Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, PHP, C#, Kotlin, Scala, Swift, Lua, Elixir
+Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, PHP, C#, Kotlin, Scala, Swift, Lua, Elixir, R
 
 Language is auto-detected or specify with `--lang`.
+
+**R Support:** Install with `pip install llm-tldr[r]` or `uv pip install -e ".[r]"` (requires git to build tree-sitter-r from source).
 
 ---
 
