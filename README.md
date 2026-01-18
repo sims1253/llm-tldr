@@ -330,6 +330,14 @@ For AI tools (Claude Desktop, Claude Code):
 }
 ```
 
+**OpenCode** - Copy the skill to your OpenCode config:
+```bash
+mkdir -p ~/.config/opencode/skill/tldr-code-analysis
+cp contrib/opencode-skill/SKILL.md ~/.config/opencode/skill/tldr-code-analysis/
+```
+
+The skill provides portable invocation via `uvx` without requiring local installation.
+
 ---
 
 ## Configuration
