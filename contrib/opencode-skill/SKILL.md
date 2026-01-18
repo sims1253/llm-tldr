@@ -66,7 +66,7 @@ uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr warm .
 Build a semantic index for natural language search:
 
 ```bash
-uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr semantic index --lang r .
+uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr semantic index --lang r .
 ```
 
 **When to use:** Once per project before using semantic search. Required for semantic queries.
@@ -84,7 +84,7 @@ uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr semantic search "
 Get an overview of project organization:
 
 ```bash
-uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr structure . --lang r --max 20
+uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr structure . --lang r --max 20
 ```
 
 **When to use:** When starting with a new codebase or understanding module layout.
@@ -102,7 +102,7 @@ uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr calls .
 Find all functions that call a specific function:
 
 ```bash
-uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr impact function_name . --lang r
+uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr impact function_name . --lang r
 ```
 
 **When to use:** Before modifying a function to understand its usage throughout the codebase.
@@ -111,7 +111,7 @@ uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr impact function_n
 Identify architectural patterns and component relationships:
 
 ```bash
-uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr arch . --lang r
+uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr arch . --lang r
 ```
 
 **When to use:** When understanding high-level architecture or identifying design patterns.
@@ -120,7 +120,7 @@ uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr arch . --lang r
 Extract and analyze code units from a file:
 
 ```bash
-uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr extract file.R
+uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr extract file.R
 ```
 
 **When to use:** When you need detailed analysis of a specific file's structure.
@@ -151,9 +151,9 @@ TLDR has enhanced support for R with additional analysis capabilities:
 Always use the `--lang` flag to ensure accurate analysis:
 
 ```bash
-uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr structure . --lang r --max 20
+uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr structure . --lang r --max 20
 uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr semantic index --lang python .
-uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr impact my_function . --lang r
+uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr impact my_function . --lang r
 ```
 
 ---
@@ -187,7 +187,7 @@ Replace `.` with specific paths for targeted analysis:
 
 ```bash
 uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr structure ./src --lang python
-uvx --from 'git+https://github.com/sims1253/llm-tldr@dev' tldr extract ./R/utils.R
+uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr extract ./R/utils.R
 ```
 
 ### Common Workflow
