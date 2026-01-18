@@ -1183,32 +1183,42 @@ tldr arch src/  # See layer structure
 
 ## Installation
 
+**Option A: pip (traditional)**
 ```bash
-# From PyPI
-pip install tldr-code
+pip install llm-tldr
 
-# With all language support
-pip install tldr-code[all]
+# With R support
+pip install llm-tldr[r]
+```
 
-# Development install
-git clone https://github.com/yourusername/tldr-code
-cd tldr-code
-pip install -e ".[dev]"
+**Option B: uvx (zero-install, run directly)**
+```bash
+uvx llm-tldr warm .
+uvx llm-tldr semantic "query" .
+
+# With R support
+uvx --with 'llm-tldr[r]' llm-tldr <command>
+```
+
+**Option C: uv (faster pip alternative)**
+```bash
+uv pip install llm-tldr
+```
+
+**Development install:**
+```bash
+git clone https://github.com/sims1253/llm-tldr
+cd llm-tldr
+uv pip install -e ".[dev,r]"
 ```
 
 ### Dependencies
 
-```bash
-# Core
-pip install tree-sitter tree-sitter-languages
+Dependencies are installed automatically. For reference:
 
-# Semantic search (optional)
-pip install sentence-transformers faiss-cpu
-
-# Language-specific parsers
-pip install tree-sitter-python tree-sitter-typescript
-pip install tree-sitter-javascript tree-sitter-go tree-sitter-rust
-```
+- **Core**: tree-sitter, tree-sitter-languages
+- **Semantic search**: sentence-transformers, faiss-cpu
+- **R support**: tree-sitter-r (built from source, requires git)
 
 ---
 
