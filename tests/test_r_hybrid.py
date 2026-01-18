@@ -1,6 +1,6 @@
-"""Tests for R language support in HybridExtractor (TDD - tests first).
+"""Tests for R language support in HybridExtractor.
 
-These tests define the expected behavior for:
+These tests validate the implemented behavior for:
 1. File extension recognition (.r and .R)
 2. Function extraction with <- operator (R-specific)
 3. S3 method extraction (generic.classname pattern)
@@ -12,9 +12,9 @@ These tests define the expected behavior for:
 9. Parameter extraction with default values
 10. Call graph extraction within functions
 
-All tests should FAIL initially because:
-- R-specific extraction needs to be fully implemented
-- tree-sitter-r may not be available
+Note: These tests were originally written TDD-style. They now validate
+the fully implemented R extraction behavior. tree-sitter-r must be
+installed for these tests to run.
 """
 
 from pathlib import Path
@@ -532,15 +532,17 @@ main_function <- function(input_data) {
 
         # Should have call graph
         assert result.call_graph is not None
-        assert result.call_graph is not None
 
         # main_function should call helper_function and validate_input
         calls = result.call_graph.calls
         assert "main_function" in calls
         # Should contain both helper_function and validate_input calls
         called_funcs = calls.get("main_function", [])
-        assert "helper_function" in called_funcs or any(
-            "helper_function" in c for c in called_funcs
+        assert "helper_function" in called_funcs, (
+            "main_function should call helper_function"
+        )
+        assert "validate_input" in called_funcs, (
+            "main_function should call validate_input"
         )
 
     def test_call_graph_deduplication(self, tmp_path: Path):

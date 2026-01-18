@@ -463,7 +463,13 @@ def _get_module_exports(
     Returns:
         RelevantContext with all functions/classes from the module
     """
-    ext_map = {"python": ".py", "typescript": ".ts", "go": ".go", "rust": ".rs"}
+    ext_map = {
+        "python": ".py",
+        "typescript": ".ts",
+        "go": ".go",
+        "rust": ".rs",
+        "r": ".R",
+    }
     ext = ext_map.get(language, ".py")
 
     # Try to find the module file
@@ -475,7 +481,12 @@ def _get_module_exports(
         init_file = project / module_path / "__init__.py"
         if init_file.exists():
             module_file = init_file
-        else:
+        # Lowercase extension fallback for R
+        elif language == "r":
+            alt = project / f"{module_path}.r"
+            if alt.exists():
+                module_file = alt
+        if not module_file.exists():
             raise ValueError(
                 f"Module not found: {module_path} (tried {module_file} and {init_file})"
             )
@@ -1111,7 +1122,7 @@ def get_imports(file_path: str, language: str = "python") -> list[dict]:
         - TypeScript: {module, names, is_default, aliases}
         - Go: {module, alias}
         - Rust: {module, names, is_mod}
-        - R: {package, names}
+        - R: {module, is_source}
 
     Example:
         >>> imports = get_imports("/path/to/file.py", "python")

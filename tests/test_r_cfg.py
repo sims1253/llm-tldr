@@ -1,7 +1,7 @@
-"""Tests for R CFG extraction (TDD - tests written before implementation).
+"""Tests for R CFG extraction.
 
-These tests define the expected behavior for Control Flow Graph extraction
-from R code, including R-specific features:
+These tests validate the implemented `extract_r_cfg` extractor behavior
+for Control Flow Graph extraction from R code, including R-specific features:
 - <- for assignment
 - { } for blocks
 - switch statement (R-specific)
@@ -9,8 +9,6 @@ from R code, including R-specific features:
 - repeat loop (executes at least once)
 - for (i in 1:10) loop syntax
 - if-else if chain (R's elif equivalent)
-
-The function `extract_r_cfg` does NOT exist yet - these tests must FAIL.
 """
 
 import pytest

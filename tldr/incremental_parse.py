@@ -360,6 +360,7 @@ class TreeCache:
             ".py": "python",
             ".go": "go",
             ".rs": "rust",
+            ".r": "r",
         }
         return lang_map.get(suffix, "unknown")
 

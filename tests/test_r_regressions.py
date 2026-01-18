@@ -94,7 +94,7 @@ class TestDiagnosticsCodeInjection:
         try:
             result = get_diagnostics(str(r_file), "r", include_lint=True)
             # Result may be empty if lintr not installed, but should not crash
-            assert isinstance(result, tuple)
+            assert isinstance(result, dict)
         except Exception as e:
             # Should not get code injection errors
             assert "injection" not in str(e).lower()

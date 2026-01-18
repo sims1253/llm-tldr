@@ -785,6 +785,8 @@ class TreeSitterDefUseVisitor:
         # R - binary_operator with assignment operators: <-, =, <<-, ->, ->>
         "binary_operator",
         "equals_assignment",  # R's = assignment
+        "left_assignment",  # R's <- assignment
+        "right_assignment",  # R's ->, ->> assignment
     }
 
     # Parameter node types
