@@ -88,7 +88,7 @@ class TestDiagnosticsCodeInjection:
 
         # Create a file with a tricky name (quotes in path)
         # Note: On most systems this is valid, but we test the escaping logic
-        r_file = tmp_path / "test_file.R"
+        r_file = tmp_path / "test'file.R"
         r_file.write_text("x <- 1\n")
 
         # Result may be empty if lintr not installed, but should not crash

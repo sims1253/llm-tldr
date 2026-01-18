@@ -1211,17 +1211,28 @@ class TreeSitterDefUseVisitor:
         # R-specific for loop handling
         if self.language == "r" and node.type == "for_statement":
             # R's for_statement structure: for (variable in iterable) { body }
-            # The first child after "for" keyword is the iterator variable (definition)
+            # Children: for, (, identifier, in, iterable, ), braced_expression
             children = list(node.children)
+            seen_in = False
+            loop_var_defined = False
+
             for child in children:
-                if child.type == "identifier":
-                    # This is the loop variable (definition)
-                    self._add_ref(self.get_node_text(child), "definition", child)
+                if child.type == "in":
+                    # Mark that we've seen the 'in' keyword
+                    seen_in = True
+                elif child.type == "identifier":
+                    if not seen_in and not loop_var_defined:
+                        # This is the loop variable (definition) - comes before 'in'
+                        self._add_ref(self.get_node_text(child), "definition", child)
+                        loop_var_defined = True
+                    else:
+                        # This is part of the iterable (use) - comes after 'in'
+                        self._visit_node(child)
                 elif child.type in ("block", "braced_expression"):
                     # Loop body
                     self._visit_node(child)
                 else:
-                    # Iterable and other parts
+                    # Iterable and other parts (binary_operator, call, etc.)
                     self._visit_node(child)
             return
 
