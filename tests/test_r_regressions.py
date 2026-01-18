@@ -66,7 +66,7 @@ class TestCrossFileCallsNamedArguments:
 
         assert len(imports) == 1
         assert imports[0]["module"] == "utils.R"
-        assert imports[0]["is_source"] == True
+        assert imports[0]["is_source"]
 
 
 class TestDiagnosticsCodeInjection:
@@ -90,14 +90,13 @@ class TestDiagnosticsCodeInjection:
         r_file = tmp_path / "test_file.R"
         r_file.write_text("x <- 1\n")
 
-        # Should not raise an exception
+        # Result may be empty if lintr not installed, but should not crash
+        # Only catch the specific case where lintr isn't installed
         try:
             result = get_diagnostics(str(r_file), "r", include_lint=True)
-            # Result may be empty if lintr not installed, but should not crash
-            assert isinstance(result, dict)
-        except Exception as e:
-            # Should not get code injection errors
-            assert "injection" not in str(e).lower()
+        except ImportError:
+            pytest.skip("lintr not installed")
+        assert isinstance(result, dict)
 
 
 class TestCliAutoSentinel:

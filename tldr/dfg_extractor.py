@@ -1146,35 +1146,33 @@ class TreeSitterDefUseVisitor:
             # equals_assignment: x = value
             # left_assignment: value -> x (left-to-right assignment)
             # right_assignment: x <- value (right-to-left assignment, but structured differently)
-            children = list(node.children)
-            if len(children) >= 2:
-                # For equals_assignment: left = children[0], value = children[1]
-                # For left_assignment: value is first, variable is second (x -> y means y -> x)
-                # For right_assignment: variable is first, value is second (x <- y)
-                if node_type == "equals_assignment":
-                    var_node = children[0]
-                    value_node = children[1] if len(children) > 1 else None
-                elif node_type == "left_assignment":
-                    # Leftward assignment: value -> x
-                    value_node = children[0]
-                    var_node = children[1] if len(children) > 1 else None
-                else:  # right_assignment
-                    # Rightward assignment: x <- value
-                    var_node = children[0]
-                    value_node = children[1] if len(children) > 1 else None
+            # Use named fields to get actual operands (not operator tokens)
+            var_node = node.child_by_field_name("name")
+            value_node = node.child_by_field_name("value")
 
-                # Visit value side first (uses)
-                if value_node:
-                    self._visit_node(value_node)
+            # Fallback to named children if fields not available
+            if var_node is None or value_node is None:
+                named_children = [c for c in node.children if c.is_named]
+                if len(named_children) >= 2:
+                    if node_type == "left_assignment":
+                        # Leftward assignment: value -> x (variable is second named child)
+                        value_node = named_children[0]
+                        var_node = named_children[1]
+                    else:
+                        # equals_assignment and right_assignment: variable is first named child
+                        var_node = named_children[0]
+                        value_node = (
+                            named_children[1] if len(named_children) > 1 else None
+                        )
 
-                # Add definition for variable
-                if var_node and var_node.type == "identifier":
-                    name = self.get_node_text(var_node)
-                    self._add_ref(name, "definition", var_node)
-            else:
-                # Fallback: visit all children
-                for child in children:
-                    self._visit_node(child)
+            # Visit value side first (uses)
+            if value_node:
+                self._visit_node(value_node)
+
+            # Add definition for variable
+            if var_node and var_node.type == "identifier":
+                name = self.get_node_text(var_node)
+                self._add_ref(name, "definition", var_node)
 
     def _extract_pattern_names(self, pattern, ref_type: str):
         """Extract variable names from a pattern (Rust, destructuring)."""
@@ -1735,14 +1733,42 @@ def extract_r_dfg(code: str, function_name: str) -> DFGInfo:
 
     def find_r_function(node) -> Any:
         """Find R function assignment node by name."""
-        if node.type == "binary_operator":
+        # Handle all R assignment types: binary_operator, equals_assignment, left_assignment, right_assignment
+        if node.type in (
+            "binary_operator",
+            "equals_assignment",
+            "left_assignment",
+            "right_assignment",
+        ):
             children = list(node.children)
-            for child in children:
-                if child.type == "identifier":
-                    name = source_bytes[child.start_byte : child.end_byte].decode(
+
+            # For binary_operator, search for identifier matching function_name
+            if node.type == "binary_operator":
+                for child in children:
+                    if child.type == "identifier":
+                        name = source_bytes[child.start_byte : child.end_byte].decode(
+                            "utf-8"
+                        )
+                        # Check if this binary operator has a function_definition child
+                        has_func = any(
+                            c.type == "function_definition" for c in children
+                        )
+                        if name == function_name and has_func:
+                            return node
+            else:
+                # For equals_assignment, left_assignment, right_assignment:
+                # Use named fields or named children to find identifier and function_definition
+                var_node = node.child_by_field_name("name")
+                if var_node is None:
+                    named_children = [c for c in children if c.is_named]
+                    if len(named_children) >= 2:
+                        var_node = named_children[0]
+
+                if var_node and var_node.type == "identifier":
+                    name = source_bytes[var_node.start_byte : var_node.end_byte].decode(
                         "utf-8"
                     )
-                    # Check if this binary operator has a function_definition child
+                    # Check if this assignment has a function_definition child
                     has_func = any(c.type == "function_definition" for c in children)
                     if name == function_name and has_func:
                         return node

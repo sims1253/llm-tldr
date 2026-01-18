@@ -387,6 +387,7 @@ source("helpers.R")
         modules = [imp.module for imp in result.imports]
         assert any("utils.R" in m for m in modules)
         assert any("helpers.R" in m for m in modules)
+        assert all(imp.is_from for imp in result.imports)
 
     def test_namespaced_import_extraction(self, tmp_path: Path):
         """Namespace-qualified imports should be handled."""
