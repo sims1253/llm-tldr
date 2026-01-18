@@ -280,7 +280,10 @@ Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, PHP, C#, Kotlin, S
 
 Language is auto-detected or specify with `--lang`.
 
-**R Support:** Install with `pip install llm-tldr[r]` or `uv pip install -e ".[r]"` (requires git to build tree-sitter-r from source).
+**R Support:** Install with `pip install llm-tldr[r]` or `uv pip install -e ".[r]"` (requires git to build tree-sitter-r from source). R support includes:
+- Full CFG analysis with `repeat` loops and `switch()` calls
+- DFG analysis with rightward assignment (`->`, `->>`) operators
+- S7 class and method extraction (modern R OOP)
 
 ---
 

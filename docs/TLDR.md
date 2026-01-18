@@ -215,6 +215,7 @@ Tree-sitter parsers under the hood mean **one interface, 16 languages:**
 | Swift | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ Basic |
 | Lua | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ Basic |
 | Elixir | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ Basic |
+| R | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full |
 
 **\*Semantic embeddings:**
 - **Full**: Embeddings include all 5 layers (signature, call graph, CFG complexity, DFG variables, dependencies)
@@ -226,6 +227,39 @@ Tree-sitter parsers under the hood mean **one interface, 16 languages:**
 # Same commands, different languages
 tldr context main --project ./go-service --lang go
 tldr impact processRequest ./rust-api --lang rust
+```
+
+### R Language Support
+
+R support requires the `[r]` extra for tree-sitter-r compilation:
+
+```bash
+pip install llm-tldr[r]
+# or
+uv pip install -e ".[r]"
+```
+
+**R-specific syntax handling:**
+- **`repeat` loops**: CFG analysis supports R's infinite loop construct with `break` for termination. Body is treated as a braced expression block.
+- **`switch()` calls**: Parsed as function calls (not statements), enabling proper call graph analysis for switch-style dispatch.
+- **Rightward assignment**: DFG analysis handles `->` and `->>` operators with variable targets on the right side.
+- **For loop variables**: Iterator variables are properly tracked in data flow.
+
+**S7 class and method extraction:**
+S7 is R's modern OOP system. TLDR extracts:
+- Class definitions
+- Method implementations with `generic.ClassName` naming convention (e.g., `print.Person`)
+- Method-to-class bindings
+
+```bash
+# Analyze an R file
+tldr extract analysis.R --lang r
+
+# Get function context
+tldr context my_function --project ./r-project --lang r
+
+# Trace data flow
+tldr dfg analysis.R process_data --lang r
 ```
 
 ---
