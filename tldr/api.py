@@ -219,13 +219,15 @@ class PathTraversalError(ValueError):
     pass
 
 
-def _validate_path_containment(file_path: str, base_path: str | None = None) -> Path:
+def _validate_path_containment(
+    file_path: str | Path, base_path: str | None = None
+) -> Path:
     """Validate that file_path doesn't escape base_path via traversal.
 
     Detects directory traversal attacks (../..) and symlink escapes.
 
     Args:
-        file_path: The path to validate
+        file_path: The path to validate (str or Path)
         base_path: Optional container directory. If None, detects traversal
                    patterns that escape the apparent starting directory.
 
@@ -236,12 +238,15 @@ def _validate_path_containment(file_path: str, base_path: str | None = None) -> 
         PathTraversalError: If path contains traversal or escapes base
         ValueError: If path is empty or whitespace-only
     """
+    # Convert Path to string for validation
+    file_path_str = str(file_path) if not isinstance(file_path, str) else file_path
+
     # Reject empty or whitespace-only paths
-    if not file_path or not file_path.strip():
+    if not file_path_str or not file_path_str.strip():
         raise ValueError("Path cannot be empty or whitespace-only")
 
     # Check for null bytes (path truncation attack)
-    if "\x00" in file_path:
+    if "\x00" in file_path_str:
         raise ValueError("Path contains null byte")
 
     # Resolve the path (follows symlinks, normalizes ..)
@@ -252,27 +257,27 @@ def _validate_path_containment(file_path: str, base_path: str | None = None) -> 
         raise ValueError(f"Invalid path: {e}")
 
     # Check for traversal patterns in original path
-    if ".." in file_path:
+    if ".." in file_path_str:
         if base_path:
             # Explicit base path provided - enforce containment
             base = Path(base_path).resolve()
             try:
                 if not resolved.is_relative_to(base):
                     raise PathTraversalError(
-                        f"Path '{file_path}' escapes base directory '{base_path}' via traversal"
+                        f"Path '{file_path_str}' escapes base directory '{base_path}' via traversal"
                     )
             except ValueError:
                 raise PathTraversalError(
-                    f"Path '{file_path}' escapes base directory '{base_path}'"
+                    f"Path '{file_path_str}' escapes base directory '{base_path}'"
                 )
         else:
             # No explicit base path - detect suspicious traversal patterns
             # A path like "/tmp/project/../outside/file.py" is suspicious because
-            # the ".." effectively escapes from "project" into a sibling directory
+            # ".." effectively escapes from "project" into a sibling directory
             #
             # Strategy: Find directory components that are "entered" then immediately
             # "exited" via .. - this indicates intentional escape
-            path_obj = Path(file_path)
+            path_obj = Path(file_path_str)
             parts = list(path_obj.parts)
 
             # Look for pattern: <dir>/.. which indicates entering then leaving a directory

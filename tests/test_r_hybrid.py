@@ -673,6 +673,52 @@ MyRefClass <- setRefClass("MyRefClass",
         class_names = [c.name for c in result.classes]
         assert any("MyRefClass" in name for name in class_names)
 
+    def test_s7_namespaced_extraction(self, tmp_path: Path):
+        """S7 namespaced classes and methods (S7::new_class, S7::method) should be extracted."""
+        r_file = tmp_path / "s7_namespaced.r"
+        r_file.write_text(r"""
+ADaMData <- S7::new_class(
+    "ADaMData",
+    package = "pharmhand",
+    properties = list(
+        data = S7::new_property(class_data.frame)
+    )
+)
+
+analyze <- S7::new_generic("analyze", "x")
+
+S7::method(to_word, ADaMData) <- function(x, ...) {
+    x@data
+}
+""")
+
+        extractor = HybridExtractor()
+        result = extractor.extract(r_file)
+
+        # Should extract the S7 class
+        class_names = [c.name for c in result.classes]
+        assert any("ADaMData" in name for name in class_names)
+
+        # Find the ADaMData class
+        adam_class = next((c for c in result.classes if c.name == "ADaMData"), None)
+        assert adam_class is not None
+
+        # Should have the S7::method method associated with the class
+        method_names = [m.name for m in adam_class.methods]
+        assert "to_word.ADaMData" in method_names
+
+        # Methods should be marked as is_method
+        to_word_method = next(
+            (m for m in adam_class.methods if m.name == "to_word.ADaMData"), None
+        )
+        assert to_word_method is not None
+        assert to_word_method.is_method is True
+
+        # Functions should be extracted: analyze and to_word.ADaMData
+        func_names = [f.name for f in result.functions]
+        assert "analyze" in func_names
+        assert "to_word.ADaMData" in func_names
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

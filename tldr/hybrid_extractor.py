@@ -4043,6 +4043,14 @@ class HybridExtractor:
                     self._extract_r_calls(
                         child, s7_method.name, source, call_graph, defined_names
                     )
+                elif self._extract_r_s7_generic(child, source):
+                    # Check for S7 new_generic() syntax: generic_name <- new_generic("name", "x")
+                    s7_generic = self._extract_r_s7_generic(child, source)
+                    if s7_generic:
+                        module_info.functions.append(s7_generic)
+                        self._extract_r_calls(
+                            child, s7_generic.name, source, call_graph, defined_names
+                        )
                 elif self._is_r_class_assignment(child, source):
                     class_info = self._extract_r_class(child, source)
                     if class_info:
@@ -4126,6 +4134,13 @@ class HybridExtractor:
                 func_name = self._safe_decode(source[child.start_byte : child.end_byte])
                 if func_name != "method":
                     return None
+            elif child.type == "namespace_operator":
+                # Handle S7::method() syntax
+                text = self._safe_decode(source[child.start_byte : child.end_byte])
+                if "::" in text:
+                    func_name = text.split("::")[-1]
+                    if func_name != "method":
+                        return None
             elif child.type == "arguments":
                 # Extract the two arguments: generic and class
                 args = [c for c in child.children if c.type == "argument"]
@@ -4177,6 +4192,82 @@ class HybridExtractor:
             return_type=None,  # R doesn't have static types
             docstring=docstring,
             is_method=True,
+            line_number=node.start_point[0] + 1,
+        )
+
+    def _extract_r_s7_generic(self, node, source: bytes) -> FunctionInfo | None:
+        """Extract an S7 generic using new_generic() syntax.
+
+        S7 generics follow this pattern:
+            generic_name <- new_generic("generic_name", "x")
+
+        For example:
+            analyze <- new_generic("analyze", "x")
+        """
+        if node.type != "binary_operator":
+            return None
+
+        # Check for <- operator
+        children = list(node.children)
+        has_assign_op = False
+        assign_idx = -1
+        for i, child in enumerate(children):
+            child_text = self._safe_decode(source[child.start_byte : child.end_byte])
+            if child_text in ("<-", "=", "<<-"):
+                has_assign_op = True
+                assign_idx = i
+                break
+
+        if not has_assign_op:
+            return None
+
+        # Check if LHS is an identifier (the generic name)
+        lhs_node = children[0]
+        generic_name = None
+        if lhs_node.type == "identifier":
+            generic_name = self._safe_decode(
+                source[lhs_node.start_byte : lhs_node.end_byte]
+            )
+
+        if not generic_name:
+            return None
+
+        # Check if RHS is a call to 'new_generic' or 'S7::new_generic'
+        if assign_idx + 1 >= len(children):
+            return None
+
+        rhs_node = children[assign_idx + 1]
+        if rhs_node.type != "call":
+            return None
+
+        # Verify it's a new_generic call
+        is_new_generic = False
+        for child in rhs_node.children:
+            if child.type == "identifier":
+                func_name = self._safe_decode(source[child.start_byte : child.end_byte])
+                if func_name == "new_generic":
+                    is_new_generic = True
+                    break
+            elif child.type == "namespace_operator":
+                text = self._safe_decode(source[child.start_byte : child.end_byte])
+                if "::" in text:
+                    func_name = text.split("::")[-1]
+                    if func_name == "new_generic":
+                        is_new_generic = True
+                        break
+
+        if not is_new_generic:
+            return None
+
+        # Try to extract docstring (roxygen comments above the assignment)
+        docstring = self._extract_r_docstring(node, source)
+
+        return FunctionInfo(
+            name=generic_name,
+            params=[],
+            return_type=None,  # R doesn't have static types
+            docstring=docstring,
+            is_method=False,
             line_number=node.start_point[0] + 1,
         )
 
