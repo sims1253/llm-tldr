@@ -945,7 +945,6 @@ class TreeSitterDefUseVisitor:
             "use",
             "impl",
             "trait",
-            "struct",
             "enum",
             "self",
             "Self",
@@ -1137,6 +1136,43 @@ class TreeSitterDefUseVisitor:
             if var_node and var_node.type == "identifier":
                 name = self.get_node_text(var_node)
                 self._add_ref(name, "definition", var_node)
+        elif (
+            node_type in ("equals_assignment", "left_assignment", "right_assignment")
+            and self.language == "r"
+        ):
+            # R: Additional assignment node types from tree-sitter-r
+            # equals_assignment: x = value
+            # left_assignment: value -> x (left-to-right assignment)
+            # right_assignment: x <- value (right-to-left assignment, but structured differently)
+            children = list(node.children)
+            if len(children) >= 2:
+                # For equals_assignment: left = children[0], value = children[1]
+                # For left_assignment: value is first, variable is second (x -> y means y -> x)
+                # For right_assignment: variable is first, value is second (x <- y)
+                if node_type == "equals_assignment":
+                    var_node = children[0]
+                    value_node = children[1] if len(children) > 1 else None
+                elif node_type == "left_assignment":
+                    # Leftward assignment: value -> x
+                    value_node = children[0]
+                    var_node = children[1] if len(children) > 1 else None
+                else:  # right_assignment
+                    # Rightward assignment: x <- value
+                    var_node = children[0]
+                    value_node = children[1] if len(children) > 1 else None
+
+                # Visit value side first (uses)
+                if value_node:
+                    self._visit_node(value_node)
+
+                # Add definition for variable
+                if var_node and var_node.type == "identifier":
+                    name = self.get_node_text(var_node)
+                    self._add_ref(name, "definition", var_node)
+            else:
+                # Fallback: visit all children
+                for child in children:
+                    self._visit_node(child)
 
     def _extract_pattern_names(self, pattern, ref_type: str):
         """Extract variable names from a pattern (Rust, destructuring)."""
@@ -1449,7 +1485,7 @@ def extract_c_dfg(code: str, function_name: str) -> DFGInfo:
 def _find_c_function_by_name(root, name: str, source: bytes):
     """Find a C function node by name in tree-sitter tree."""
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "function_definition":
             declarator = node.child_by_field_name("declarator")
             # Handle pointer_declarator wrapping function_declarator
@@ -1530,7 +1566,7 @@ def _find_cpp_function_by_name(root, name: str, source: bytes):
     Handles both standalone functions (identifier) and class methods (field_identifier).
     """
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "function_definition":
             declarator = node.child_by_field_name("declarator")
             # Handle pointer_declarator wrapping function_declarator
@@ -1609,7 +1645,7 @@ def extract_ruby_dfg(code: str, function_name: str) -> DFGInfo:
 def _find_ruby_function_by_name(root, name: str, source: bytes):
     """Find a Ruby method node by name in tree-sitter tree."""
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "method":
             # Get the method name from the name field
             name_node = node.child_by_field_name("name")
@@ -1641,7 +1677,7 @@ def _find_function_by_name(root, name: str, source: bytes):
         "method",  # Ruby: def method_name ... end
     }
 
-    def search(node):
+    def search(node) -> Any:
         if node.type in FUNCTION_TYPES:
             # Try to find the function name
             name_node = node.child_by_field_name("name")
@@ -1695,16 +1731,14 @@ def extract_r_dfg(code: str, function_name: str) -> DFGInfo:
     # Find the function (R functions: name <- function(args) { ... })
     func_node = None
 
-    def find_r_function(node):
+    def find_r_function(node) -> Any:
         """Find R function assignment node by name."""
         if node.type == "binary_operator":
             children = list(node.children)
             for child in children:
                 if child.type == "identifier":
-                    name = (
-                        child.text.decode("utf-8")
-                        if hasattr(child, "text")
-                        else str(child)
+                    name = source_bytes[child.start_byte : child.end_byte].decode(
+                        "utf-8"
                     )
                     # Check if this binary operator has a function_definition child
                     has_func = any(c.type == "function_definition" for c in children)
@@ -1791,7 +1825,7 @@ def extract_php_dfg(code: str, function_name: str) -> DFGInfo:
 def _find_php_function_by_name(root, name: str, source: bytes):
     """Find a PHP function node by name in tree-sitter tree."""
 
-    def search(node):
+    def search(node) -> Any:
         # PHP function_definition has name child
         if node.type == "function_definition":
             name_node = node.child_by_field_name("name")
@@ -2036,7 +2070,7 @@ def extract_swift_dfg(code: str, function_name: str) -> DFGInfo:
 def _find_swift_function_by_name(root, name: str, source: bytes):
     """Find a Swift function node by name in tree-sitter tree."""
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "function_declaration":
             # Get the function name from the name field
             name_node = node.child_by_field_name("name")
@@ -2244,7 +2278,7 @@ def extract_csharp_dfg(code: str, function_name: str) -> DFGInfo:
 def _find_csharp_function_by_name(root, name: str, source: bytes):
     """Find a C# method node by name in tree-sitter tree."""
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "method_declaration":
             # Get the method name from the name field
             name_node = node.child_by_field_name("name")
@@ -2480,7 +2514,7 @@ def extract_kotlin_dfg(code: str, function_name: str) -> DFGInfo:
 def _find_kotlin_function_by_name(root, name: str, source: bytes):
     """Find a Kotlin function node by name in tree-sitter tree."""
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "function_declaration":
             # Get the function name from the identifier child
             for child in node.children:
@@ -2740,7 +2774,7 @@ def extract_scala_dfg(code: str, function_name: str) -> DFGInfo:
 def _find_scala_function_by_name(root, name: str, source: bytes):
     """Find a Scala function node by name in tree-sitter tree."""
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "function_definition":
             # Get the function name from the name field
             name_node = node.child_by_field_name("name")
@@ -3051,7 +3085,7 @@ def _find_lua_function_by_name(root, name: str, source: bytes):
     - local function name() ... end (function_declaration with local)
     """
 
-    def search(node):
+    def search(node) -> Any:
         # Check function_declaration: function name() end or local function name() end
         if node.type == "function_declaration":
             # Find the identifier child (the function name)
@@ -3374,7 +3408,7 @@ def _find_luau_function_by_name(root, name: str, source: bytes):
     - local function name() ... end (function_declaration with local)
     """
 
-    def search(node):
+    def search(node) -> Any:
         # Check function_declaration: function name() end or local function name() end
         if node.type == "function_declaration":
             # Find the identifier child (the function name)
@@ -3707,7 +3741,7 @@ def _find_elixir_function_by_name(root, name: str, source: bytes):
     - defp private_function(args) do ... end
     """
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "call":
             # Check if this is a def/defp call
             call_name = None
@@ -4147,7 +4181,7 @@ class LuauDefUseVisitor:
 def _find_luau_function_by_name(root, name: str, source: bytes):
     """Find a Luau function node by name in tree-sitter tree."""
 
-    def search(node):
+    def search(node) -> Any:
         if node.type == "function_declaration":
             for child in node.children:
                 if child.type == "identifier":

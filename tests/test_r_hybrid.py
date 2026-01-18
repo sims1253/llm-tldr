@@ -22,6 +22,8 @@ from pathlib import Path
 import pytest
 from tldr.hybrid_extractor import HybridExtractor
 
+pytest.importorskip("tree_sitter_r")
+
 
 class TestRFileExtensionRecognition:
     """Test that .r and .R files are recognized and parsed as R."""

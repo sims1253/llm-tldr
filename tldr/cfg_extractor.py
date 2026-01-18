@@ -958,7 +958,7 @@ class TreeSitterCFGBuilder:
                 if child.is_named:
                     self._visit_node(child)
 
-    def _visit_r_call(self, node):
+    def _visit_r_call(self, node) -> None:
         """Handle R function calls, especially switch() which is a branch construct.
 
         R's switch() is parsed as a call node:
@@ -1014,7 +1014,7 @@ class TreeSitterCFGBuilder:
             arg_children = [c for c in arguments_node.children if c.is_named]
             case_args = arg_children[1:] if len(arg_children) > 1 else []
 
-            for i, case_arg in enumerate(case_args):
+            for case_arg in case_args:
                 # Each case is a new decision point
                 self.decision_points += 1
 

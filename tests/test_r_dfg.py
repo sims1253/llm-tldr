@@ -14,6 +14,10 @@ The function `extract_r_dfg` exists but these tests verify R-specific behavior.
 
 import pytest
 
+pytest.importorskip("tree_sitter_r")
+
+from tldr.dfg_extractor import extract_r_dfg
+
 
 # =============================================================================
 # Test 1: Basic Definition and Use with <- Assignment
@@ -25,8 +29,6 @@ def test_r_dfg_basic_def_use_leftward():
 
     R uses <- as the primary assignment operator (not = or ==).
     """
-    from tldr.dfg_extractor import extract_r_dfg
-
     code = """
 example <- function() {
     x <- 10
@@ -66,7 +68,6 @@ def test_r_dfg_rightward_assignment():
     This is R-specific and differs from most other languages.
     The variable is on the right side of the operator.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 rightward_example <- function() {
@@ -100,7 +101,6 @@ def test_r_dfg_global_assignment():
     R's <<- operator assigns to a variable in the parent environment,
     commonly used for creating "global" variables within functions.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 global_example <- function() {
@@ -139,7 +139,6 @@ def test_r_dfg_parameters_with_defaults():
 
     R function parameters can have default values like: function(x = 10)
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 param_example <- function(x = 5, y = 10) {
@@ -176,7 +175,6 @@ def test_r_dfg_variable_across_if():
 
     Definitions in both branches should be tracked.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 if_example <- function(condition) {
@@ -213,7 +211,6 @@ def test_r_dfg_for_loop_variable():
 
     R for loops: for (i in 1:10) { ... }
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 for_example <- function() {
@@ -253,7 +250,6 @@ def test_r_dfg_compound_assignment():
 
     R supports assigning multiple variables at once or in sequence.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 compound_example <- function(a, b) {
@@ -296,7 +292,6 @@ def test_r_dfg_multiple_parameters():
 
     R functions can have any number of parameters.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 multi_param <- function(a, b, c, d) {
@@ -328,7 +323,6 @@ def test_r_dfg_nested_scope():
 
     R supports nested {} blocks within functions.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 nested_example <- function(x) {
@@ -370,7 +364,6 @@ def test_r_dfg_null_na_handling():
 
     R uses NULL for empty/missing objects and NA for missing values.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 na_example <- function() {
@@ -409,7 +402,6 @@ def test_r_dfg_rightward_global_assignment():
 
     R supports: value ->> variable (rightward global assignment).
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 global_rightward <- function() {
@@ -436,7 +428,6 @@ global_rightward <- function() {
 
 def test_r_dfg_function_not_found():
     """Should return empty DFG when function not found (not raise)."""
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 existing_func <- function() {
@@ -462,7 +453,6 @@ def test_r_dfg_equals_assignment():
 
     While <- is preferred, R also accepts = for assignment.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 equals_example <- function() {
@@ -491,7 +481,6 @@ equals_example <- function() {
 
 def test_r_dfg_while_loop():
     """Variables in while loops should be tracked correctly."""
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 while_example <- function(n) {
@@ -524,7 +513,6 @@ while_example <- function(n) {
 
 def test_r_dfg_dataflow_edges():
     """Dataflow edges should connect definitions to uses."""
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 flow_example <- function() {
@@ -541,7 +529,7 @@ flow_example <- function() {
 
     # Check that edges connect the right variables
     edge_vars = {edge.var_name for edge in dfg.dataflow_edges}
-    assert "a" in edge_vars or "b" in edge_vars, "Edges should track variable flow"
+    assert {"a", "b"} <= edge_vars, "Edges should track both a and b variable flow"
 
 
 # =============================================================================
@@ -554,7 +542,6 @@ def test_r_dfg_repeat_loop():
 
     R's repeat loop requires explicit break condition.
     """
-    from tldr.dfg_extractor import extract_r_dfg
 
     code = """
 repeat_example <- function(limit) {

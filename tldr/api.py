@@ -133,6 +133,9 @@ from .cross_file_calls import (
     parse_elixir_imports as _parse_elixir_imports,
 )
 from .cross_file_calls import (
+    parse_r_imports as _parse_r_imports,
+)
+from .cross_file_calls import (
     scan_project as _scan_project,
 )
 from .dfg_extractor import (
@@ -212,6 +215,7 @@ class PathTraversalError(ValueError):
     This is a security error indicating an attempted path traversal attack
     (e.g., using ../../../etc/passwd to escape the project directory).
     """
+
     pass
 
 
@@ -378,6 +382,7 @@ def _resolve_source(source_or_path: str) -> tuple[str, str | None]:
 @dataclass
 class FunctionContext:
     """Context for a single function."""
+
     name: str
     file: str
     line: int
@@ -391,16 +396,14 @@ class FunctionContext:
 @dataclass
 class RelevantContext:
     """The full context returned by get_relevant_context."""
+
     entry_point: str
     depth: int
     functions: list[FunctionContext] = field(default_factory=list)
 
     def to_llm_string(self) -> str:
         """Format for LLM injection."""
-        lines = [
-            f"## Code Context: {self.entry_point} (depth={self.depth})",
-            ""
-        ]
+        lines = [f"## Code Context: {self.entry_point} (depth={self.depth})", ""]
 
         for i, func in enumerate(self.functions):
             # Indentation based on call depth
@@ -413,19 +416,23 @@ class RelevantContext:
 
             # Docstring (truncated)
             if func.docstring:
-                doc = func.docstring.split('\n')[0][:80]
+                doc = func.docstring.split("\n")[0][:80]
                 lines.append(f"{indent}   # {doc}")
 
             # Complexity
             if func.blocks is not None:
-                complexity_marker = "🔥" if func.cyclomatic and func.cyclomatic > 10 else ""
-                lines.append(f"{indent}   ⚡ complexity: {func.cyclomatic or '?'} ({func.blocks} blocks) {complexity_marker}")
+                complexity_marker = (
+                    "🔥" if func.cyclomatic and func.cyclomatic > 10 else ""
+                )
+                lines.append(
+                    f"{indent}   ⚡ complexity: {func.cyclomatic or '?'} ({func.blocks} blocks) {complexity_marker}"
+                )
 
             # Calls
             if func.calls:
                 calls_str = ", ".join(func.calls[:5])
                 if len(func.calls) > 5:
-                    calls_str += f" (+{len(func.calls)-5} more)"
+                    calls_str += f" (+{len(func.calls) - 5} more)"
                 lines.append(f"{indent}   → calls: {calls_str}")
 
             lines.append("")
@@ -433,14 +440,17 @@ class RelevantContext:
         # Footer with stats
         result = "\n".join(lines)
         token_estimate = len(result) // 4
-        return result + f"\n---\n📊 {len(self.functions)} functions | ~{token_estimate} tokens"
+        return (
+            result
+            + f"\n---\n📊 {len(self.functions)} functions | ~{token_estimate} tokens"
+        )
 
 
 def _get_module_exports(
     project: Path,
     module_path: str,
     language: str = "python",
-    include_docstrings: bool = True
+    include_docstrings: bool = True,
 ) -> "RelevantContext":
     """Get all exports from a module path.
 
@@ -453,12 +463,7 @@ def _get_module_exports(
     Returns:
         RelevantContext with all functions/classes from the module
     """
-    ext_map = {
-        "python": ".py",
-        "typescript": ".ts",
-        "go": ".go",
-        "rust": ".rs"
-    }
+    ext_map = {"python": ".py", "typescript": ".ts", "go": ".go", "rust": ".rs"}
     ext = ext_map.get(language, ".py")
 
     # Try to find the module file
@@ -471,7 +476,9 @@ def _get_module_exports(
         if init_file.exists():
             module_file = init_file
         else:
-            raise ValueError(f"Module not found: {module_path} (tried {module_file} and {init_file})")
+            raise ValueError(
+                f"Module not found: {module_path} (tried {module_file} and {init_file})"
+            )
 
     # Extract all functions and classes from the module
     extractor = HybridExtractor()
@@ -526,7 +533,7 @@ def get_relevant_context(
     entry_point: str,
     depth: int = 2,
     language: str = "python",
-    include_docstrings: bool = True
+    include_docstrings: bool = True,
 ) -> RelevantContext:
     """
     Get token-efficient context for an LLM starting from an entry point.
@@ -1096,7 +1103,7 @@ def get_imports(file_path: str, language: str = "python") -> list[dict]:
 
     Args:
         file_path: Path to source file
-        language: "python", "typescript", "go", or "rust"
+        language: "python", "typescript", "go", "rust", "r", or "elixir"
 
     Returns:
         List of import info dicts. Structure varies by language:
@@ -1104,6 +1111,7 @@ def get_imports(file_path: str, language: str = "python") -> list[dict]:
         - TypeScript: {module, names, is_default, aliases}
         - Go: {module, alias}
         - Rust: {module, names, is_mod}
+        - R: {package, names}
 
     Example:
         >>> imports = get_imports("/path/to/file.py", "python")
@@ -1143,6 +1151,8 @@ def get_imports(file_path: str, language: str = "python") -> list[dict]:
         return _parse_luau_imports(file_path)
     elif language == "elixir":
         return _parse_elixir_imports(file_path)
+    elif language == "r":
+        return _parse_r_imports(file_path)
     else:
         raise ValueError(f"Unsupported language: {language}")
 

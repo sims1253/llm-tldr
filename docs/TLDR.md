@@ -1183,7 +1183,8 @@ tldr arch src/  # See layer structure
 
 ## Installation
 
-**Option A: pip (traditional)**
+### Option A: pip (traditional)
+
 ```bash
 pip install llm-tldr
 
@@ -1191,7 +1192,8 @@ pip install llm-tldr
 pip install llm-tldr[r]
 ```
 
-**Option B: uvx (zero-install, run directly)**
+### Option B: uvx (zero-install, run directly)
+
 ```bash
 uvx llm-tldr warm .
 uvx llm-tldr semantic "query" .
@@ -1200,12 +1202,14 @@ uvx llm-tldr semantic "query" .
 uvx --with 'llm-tldr[r]' llm-tldr <command>
 ```
 
-**Option C: uv (faster pip alternative)**
+### Option C: uv (faster pip alternative)
+
 ```bash
 uv pip install llm-tldr
 ```
 
-**Development install:**
+### Development install:
+
 ```bash
 git clone https://github.com/sims1253/llm-tldr
 cd llm-tldr

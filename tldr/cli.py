@@ -276,29 +276,7 @@ Semantic Search:
     ctx_p.add_argument("--project", default=".", help="Project root directory")
     ctx_p.add_argument("--depth", type=int, default=2, help="Call depth (default: 2)")
     ctx_p.add_argument(
-        "--lang",
-        default="python",
-        choices=[
-            "python",
-            "typescript",
-            "javascript",
-            "go",
-            "rust",
-            "java",
-            "c",
-            "cpp",
-            "ruby",
-            "php",
-            "kotlin",
-            "swift",
-            "csharp",
-            "scala",
-            "lua",
-            "luau",
-            "elixir",
-            "r",
-        ],
-        help="Language",
+        "--lang", default="auto", help="Language (auto-detect from cache)"
     )
 
     # tldr cfg <file> <function>
@@ -884,9 +862,9 @@ Semantic Search:
         elif args.command == "context":
             # Auto-detect language from cache if not specified
             lang = args.lang
-            if lang == "python":  # Default value - try to auto-detect
+            if lang == "auto":
                 cached = get_cached_languages(args.project)
-                if cached and cached[0] != "python":
+                if cached:
                     lang = cached[0]
             ctx = get_relevant_context(
                 args.project, args.entry, depth=args.depth, language=lang

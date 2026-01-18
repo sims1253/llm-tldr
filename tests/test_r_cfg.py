@@ -15,6 +15,8 @@ The function `extract_r_cfg` does NOT exist yet - these tests must FAIL.
 
 import pytest
 
+pytest.importorskip("tree_sitter_r")
+
 
 # =============================================================================
 # Test 1: Simple Function CFG

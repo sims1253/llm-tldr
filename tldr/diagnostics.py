@@ -1021,7 +1021,9 @@ def get_diagnostics(
                     [
                         "Rscript",
                         "-e",
-                        f'cat(jsonlite::toJSON(lintr::lint("{path}"), auto_unbox=TRUE))',
+                        "args <- commandArgs(trailingOnly=TRUE); cat(jsonlite::toJSON(lintr::lint(args[1]), auto_unbox=TRUE))",
+                        "--",
+                        str(path),
                     ],
                     capture_output=True,
                     text=True,

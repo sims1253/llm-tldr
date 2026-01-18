@@ -240,7 +240,8 @@ TLDR caches analysis results for performance:
 - Use `tldr warm .` to pre-load for interactive sessions
 
 ### Semantic Search Indexing
-Semantic search requires a one-time index build:
+Semantic search requires a one-time index build.
+
 ```bash
 uvx --from 'git+https://github.com/sims1253/llm-tldr@dev[r]' tldr semantic index --lang r .
 ```
