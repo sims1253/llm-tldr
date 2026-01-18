@@ -399,9 +399,9 @@ process_data <- function(data, threshold) {
     assert cfg is not None
     assert cfg.function_name == "process_data"
 
-    # Decision points: for(1) + if(1) + if nested(1) + else if(1) = 5 decision points
-    # Complexity = 5 + 1 = 6
-    assert cfg.cyclomatic_complexity == 6
+    # Decision points: for(1) + if(1) + if nested(1) + else if(1) = 4 decision points
+    # Complexity = 4 + 1 = 5
+    assert cfg.cyclomatic_complexity == 5
 
 
 # =============================================================================

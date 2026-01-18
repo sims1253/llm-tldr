@@ -895,6 +895,9 @@ class TreeSitterCFGBuilder:
         elif node.type == "call" and self.language == "ruby":
             # Ruby: check for .each do |x| ... end pattern (iterators)
             self._visit_ruby_call(node)
+        elif node.type == "call" and self.language == "r":
+            # R: check for switch() calls (R's switch is a function call, not a statement)
+            self._visit_r_call(node)
         else:
             # Visit children for compound nodes
             for child in node.children:
@@ -954,6 +957,129 @@ class TreeSitterCFGBuilder:
             for child in node.children:
                 if child.is_named:
                     self._visit_node(child)
+
+    def _visit_r_call(self, node):
+        """Handle R function calls, especially switch() which is a branch construct.
+
+        R's switch() is parsed as a call node:
+        - call
+          - identifier: "switch"
+          - arguments
+            - argument: switch expression (e.g., "type")
+            - argument: case 1 (e.g., '"a" = { 1 }')
+            - argument: case 2 (e.g., '"b" = { 2 }')
+            - argument: default case (unnamed, e.g., '{ 0 }')
+
+        Named arguments like '"a" = { 1 }' are named cases.
+        Unnamed arguments are default cases.
+        """
+        # Check if this is a switch call
+        func_name = None
+        for child in node.children:
+            if child.type == "identifier":
+                func_name = self.get_node_text(child)
+                break
+
+        if func_name != "switch":
+            # Not a switch call - treat as regular function call
+            for child in node.children:
+                if child.is_named:
+                    self._visit_node(child)
+            return
+
+        # This is a switch call - handle as branching construct
+        self.decision_points += 1
+
+        if self.current_block:
+            self.current_block.block_type = "branch"
+            self.current_block.end_line = node.start_point[0] + 1
+            switch_block_id = self.current_block.id
+        else:
+            switch_block = self.new_block("branch", node.start_point[0] + 1)
+            switch_block_id = switch_block.id
+
+        # Create after-switch block for merging
+        after_switch = self.new_block("body", node.end_point[0] + 1)
+
+        # Find arguments node
+        arguments_node = None
+        for child in node.children:
+            if child.type == "arguments":
+                arguments_node = child
+                break
+
+        if arguments_node:
+            # Skip first argument (the switch expression)
+            # Process remaining arguments as cases
+            arg_children = [c for c in arguments_node.children if c.is_named]
+            case_args = arg_children[1:] if len(arg_children) > 1 else []
+
+            for i, case_arg in enumerate(case_args):
+                # Each case is a new decision point
+                self.decision_points += 1
+
+                # Get case condition (if named argument)
+                case_condition = None
+                case_value_node = None
+
+                # Check if this is a named argument (has '=' operator)
+                has_equals = any(c.type == "=" for c in case_arg.children)
+
+                if has_equals:
+                    # Named case: "a" = { 1 }
+                    # Find the string before '='
+                    for child in case_arg.children:
+                        if child.type == "string":
+                            case_condition = self.get_node_text(child)
+                            break
+                        elif child.type == "identifier":
+                            # R also allows identifier-based switch cases
+                            case_condition = self.get_node_text(child)
+                            break
+                else:
+                    # Unnamed case - this is the default
+                    case_condition = "default"
+
+                # Find the actual case value (after '=' or the value itself)
+                # For braced expressions: { 1 }, use the braced_expression node
+                # For simple values: a + b, use the argument directly
+                for child in case_arg.children:
+                    if child.is_named:
+                        # Skip string/identifier (they're the condition, not the value)
+                        if child.type not in ("string", "identifier"):
+                            case_value_node = child
+                            break
+
+                if case_value_node:
+                    # Create case block
+                    case_start = case_value_node.start_point[0] + 1
+                    case_end = case_value_node.end_point[0] + 1
+                    case_block = self.new_block("body", case_start, case_end)
+
+                    # Edge from switch to this case
+                    edge_type = "case" if case_condition != "default" else "default"
+                    self.add_edge(
+                        switch_block_id, case_block.id, edge_type, case_condition
+                    )
+
+                    # Visit the case value
+                    old_current = self.current_block
+                    self.current_block = case_block
+                    self._visit_node(case_value_node)
+
+                    # Connect case to after_switch (unless it returns)
+                    if (
+                        self.current_block
+                        and self.current_block.id not in self.exit_block_ids
+                    ):
+                        self.add_edge(
+                            self.current_block.id, after_switch.id, "unconditional"
+                        )
+
+                    self.current_block = old_current
+
+        # Continue with after-switch block
+        self.current_block = after_switch
 
     def _find_child_by_type(self, node, types: set[str]):
         """Find first child matching any of the given types."""
@@ -1201,10 +1327,12 @@ class TreeSitterCFGBuilder:
         self.current_block = after_loop
 
     def _visit_repeat(self, node):
-        """Handle Lua's repeat-until loops.
+        """Handle repeat loops - Lua's repeat-until and R's infinite repeat.
 
-        repeat-until is unique: body executes at least once, then condition is checked.
-        Unlike while (condition checked first), the body always runs first.
+        Lua: repeat-until executes body at least once, then checks until condition.
+        R: repeat is an infinite loop that exits via break statements only.
+
+        Both: body executes before any condition check.
         """
         # Track decision point for complexity
         self.decision_points += 1
@@ -1227,25 +1355,42 @@ class TreeSitterCFGBuilder:
 
         # Visit body statements
         self.current_block = body
-        for child in node.children:
-            if child.type == "block":
-                self._visit_node(child)
-                break
 
-        # Get condition (until clause)
-        condition_node = node.child_by_field_name("condition")
-        condition = (
-            self.get_node_text(condition_node) if condition_node else "<condition>"
-        )
+        # Find and visit body (language-specific)
+        if self.language == "r":
+            # R: uses braced_expression for body
+            for child in node.children:
+                if child.type == "braced_expression":
+                    self._visit_node(child)
+                    break
+        else:
+            # Lua/Luau: uses block for body
+            for child in node.children:
+                if child.type == "block":
+                    self._visit_node(child)
+                    break
 
-        # After body, check condition: if true -> exit, if false -> repeat
-        if self.current_block and self.current_block.id not in self.exit_block_ids:
-            # False condition -> back to body
-            self.add_edge(
-                self.current_block.id, body.id, "back_edge", f"not ({condition})"
+        if self.language == "r":
+            # R: infinite loop - unconditional back-edge, no condition check
+            # break statements create exit edges via _visit_break
+            if self.current_block and self.current_block.id not in self.exit_block_ids:
+                self.add_edge(self.current_block.id, body.id, "back_edge")
+        else:
+            # Lua/Luau: repeat-until with condition check
+            # Get condition (until clause)
+            condition_node = node.child_by_field_name("condition")
+            condition = (
+                self.get_node_text(condition_node) if condition_node else "<condition>"
             )
-            # True condition -> exit loop
-            self.add_edge(self.current_block.id, after_loop.id, "true", condition)
+
+            # After body, check condition: if true -> exit, if false -> repeat
+            if self.current_block and self.current_block.id not in self.exit_block_ids:
+                # False condition -> back to body
+                self.add_edge(
+                    self.current_block.id, body.id, "back_edge", f"not ({condition})"
+                )
+                # True condition -> exit loop
+                self.add_edge(self.current_block.id, after_loop.id, "true", condition)
 
         self.loop_guard_stack.pop()
         self.after_loop_stack.pop()

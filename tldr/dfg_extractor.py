@@ -1093,36 +1093,50 @@ class TreeSitterDefUseVisitor:
                     self._add_ref(name, "update", left)
         elif node_type == "binary_operator" and self.language == "r":
             # R: Assignment operators: <-, =, <<-, ->, ->>
-            # Pattern: identifier <- value or value -> identifier
+            # Also handles other operators like +, -, *, /
             children = list(node.children)
             left = None
             right = None
+            operator_index = None
 
-            # Check for assignment operators
+            # Find the assignment operator and operands
             for i, child in enumerate(children):
                 child_text = self.get_node_text(child)
-                # Find left operand (identifier)
-                if child.type == "identifier" and left is None:
-                    left = child
-                # Find assignment operator
-                elif child_text in ("<-", "=", "<<-", "->", "->>"):
-                    if i > 0 and children[0].type == "identifier":
-                        left = children[0]
-                    # Find right operand
+                if child_text in ("<-", "=", "<<-", "->", "->>"):
+                    operator_index = i
+                    # Left operand is before the operator
+                    if i > 0:
+                        left = children[i - 1]
+                    # Right operand is after the operator
                     if i < len(children) - 1:
                         right = children[i + 1]
+                    break
 
-            # Determine if this is rightward assignment (x -> y)
-            is_rightward = any(self.get_node_text(c) in ("->", "->>") for c in children)
+            # If not an assignment operator (e.g., +, -, *, /), visit all children
+            if operator_index is None:
+                for child in children:
+                    self._visit_node(child)
+                return
+
+            # Determine if this is rightward assignment (value -> variable)
+            is_rightward = False
+            if operator_index is not None:
+                operator_text = self.get_node_text(children[operator_index])
+                is_rightward = operator_text in ("->", "->>")
+
+            # For rightward assignment, the variable is on the RIGHT side
+            # For leftward assignment, the variable is on the LEFT side
+            var_node = right if is_rightward else left
+            value_node = left if is_rightward else right
 
             # Visit value side first (uses)
-            if right:
-                self._visit_node(right)
+            if value_node:
+                self._visit_node(value_node)
 
             # Add definition for variable
-            if left and left.type == "identifier":
-                name = self.get_node_text(left)
-                self._add_ref(name, "definition", left)
+            if var_node and var_node.type == "identifier":
+                name = self.get_node_text(var_node)
+                self._add_ref(name, "definition", var_node)
 
     def _extract_pattern_names(self, pattern, ref_type: str):
         """Extract variable names from a pattern (Rust, destructuring)."""
@@ -1156,7 +1170,26 @@ class TreeSitterDefUseVisitor:
         """Handle for loop - iterator variable is definition."""
         # TypeScript/JavaScript: for (let i = 0; ...) or for (x of arr)
         # Go: for i, v := range arr
+        # R: for (i in 1:10) { ... } - first child is the iterator variable
 
+        # R-specific for loop handling
+        if self.language == "r" and node.type == "for_statement":
+            # R's for_statement structure: for (variable in iterable) { body }
+            # The first child after "for" keyword is the iterator variable (definition)
+            children = list(node.children)
+            for child in children:
+                if child.type == "identifier":
+                    # This is the loop variable (definition)
+                    self._add_ref(self.get_node_text(child), "definition", child)
+                elif child.type in ("block", "braced_expression"):
+                    # Loop body
+                    self._visit_node(child)
+                else:
+                    # Iterable and other parts
+                    self._visit_node(child)
+            return
+
+        # TypeScript/JavaScript/Go handling
         for child in node.children:
             if child.type in ("lexical_declaration", "variable_declaration"):
                 self._handle_assignment(child)
@@ -1628,8 +1661,6 @@ def _find_function_by_name(root, name: str, source: bytes):
     return search(root)
 
 
-
-
 def extract_r_dfg(code: str, function_name: str) -> DFGInfo:
     """
     Extract DFG for an R function.
@@ -1707,6 +1738,8 @@ def extract_r_dfg(code: str, function_name: str) -> DFGInfo:
         var_refs=visitor.refs,
         dataflow_edges=edges,
     )
+
+
 def extract_php_dfg(code: str, function_name: str) -> DFGInfo:
     """
     Extract DFG for a PHP function.

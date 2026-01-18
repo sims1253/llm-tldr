@@ -595,6 +595,54 @@ MyClass <- new_class("MyClass",
         class_names = [c.name for c in result.classes]
         assert any("MyClass" in name for name in class_names)
 
+    def test_s7_method_extraction(self, tmp_path: Path):
+        """S7 method() syntax should be extracted and associated with classes."""
+        r_file = tmp_path / "s7_method.r"
+        r_file.write_text(r"""
+Person <- new_class("Person",
+    properties = list(
+        name = new_property(character),
+        age = new_property(numeric)
+    )
+)
+
+method(print, Person) <- function(x) {
+    cat("Person:", x@name)
+}
+
+method(summary, Person) <- function(object, ...) {
+    list(name = object@name, age = object@age)
+}
+""")
+
+        extractor = HybridExtractor()
+        result = extractor.extract(r_file)
+
+        # Should extract the S7 class
+        class_names = [c.name for c in result.classes]
+        assert any("Person" in name for name in class_names)
+
+        # Find the Person class
+        person_class = next((c for c in result.classes if c.name == "Person"), None)
+        assert person_class is not None
+
+        # Should have methods associated with the class
+        method_names = [m.name for m in person_class.methods]
+        assert "print.Person" in method_names
+        assert "summary.Person" in method_names
+
+        # Methods should be marked as is_method
+        print_method = next(
+            (m for m in person_class.methods if m.name == "print.Person"), None
+        )
+        assert print_method is not None
+        assert print_method.is_method is True
+
+        # Methods should also be in module_info.functions
+        func_names = [f.name for f in result.functions]
+        assert "print.Person" in func_names
+        assert "summary.Person" in func_names
+
     def test_refclass_extraction(self, tmp_path: Path):
         """RefClass (R.oo) classes should be extracted."""
         r_file = tmp_path / "refclass.r"

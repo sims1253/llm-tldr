@@ -3865,6 +3865,10 @@ class HybridExtractor:
         defined_names = self._collect_r_definitions(tree.root_node, source)
 
         self._extract_r_nodes(tree.root_node, source, module_info, defined_names)
+
+        # Post-process: Associate S7 methods with their classes
+        self._associate_r_s7_methods(module_info)
+
         return module_info
 
     def _get_r_parser(self) -> Any:
@@ -3904,6 +3908,34 @@ class HybridExtractor:
                     return True
 
         return False
+
+    def _associate_r_s7_methods(self, module_info: ModuleInfo):
+        """Associate S7 methods with their corresponding classes.
+
+        S7 methods are extracted with names like 'generic.ClassName' (e.g., 'print.Person').
+        This function finds the matching class and adds the method to its methods list.
+        """
+        # Build a map of class names to ClassInfo
+        class_map = {cls.name: cls for cls in module_info.classes}
+
+        # Find S7 methods (marked with is_method=True and have . in name)
+        s7_methods = []
+        for func in module_info.functions:
+            if func.is_method and "." in func.name:
+                # Extract class name from method name (e.g., 'print.Person' -> 'Person')
+                parts = func.name.split(".", 1)
+                if len(parts) == 2:
+                    generic, class_name = parts
+                    if class_name in class_map:
+                        # Add method to class
+                        class_map[class_name].methods.append(func)
+                        s7_methods.append(func)
+
+        # Remove S7 methods from top-level functions since they're now associated with classes
+        # (Optional: keep them in both places for now for consistency with S3 methods)
+        # for func in s7_methods:
+        #     if func in module_info.functions:
+        #         module_info.functions.remove(func)
 
     def _collect_r_definitions(self, node, source: bytes) -> set[str]:
         """Collect all defined function names in R code.
@@ -4001,7 +4033,17 @@ class HybridExtractor:
 
             # Check for class definitions first (R6, S4, S7, RefClass)
             if node_type == "binary_operator":
-                if self._is_r_class_assignment(child, source):
+                # Check for S7 method() syntax: method(generic, Class) <- function(...) { ... }
+                s7_method = self._extract_r_s7_method(child, source)
+                if s7_method:
+                    # Add method to module_info.functions
+                    module_info.functions.append(s7_method)
+                    # Track S7 method for class association (done in post-processing)
+                    # Also track for call graph
+                    self._extract_r_calls(
+                        child, s7_method.name, source, call_graph, defined_names
+                    )
+                elif self._is_r_class_assignment(child, source):
                     class_info = self._extract_r_class(child, source)
                     if class_info:
                         module_info.classes.append(class_info)
@@ -4041,6 +4083,102 @@ class HybridExtractor:
                 "parenthesized_expression",
             ):
                 self._extract_r_nodes(child, source, module_info, defined_names)
+
+    def _extract_r_s7_method(self, node, source: bytes) -> FunctionInfo | None:
+        """Extract an S7 method using method() syntax.
+
+        S7 methods follow this pattern:
+            method(generic, Class) <- function(...) { ... }
+
+        For example:
+            method(print, Person) <- function(x) {
+                cat("Person:", x@name)
+            }
+        """
+        if node.type != "binary_operator":
+            return None
+
+        # Check for <- operator
+        children = list(node.children)
+        has_assign_op = False
+        assign_idx = -1
+        for i, child in enumerate(children):
+            child_text = self._safe_decode(source[child.start_byte : child.end_byte])
+            if child_text in ("<-", "=", "<<-"):
+                has_assign_op = True
+                assign_idx = i
+                break
+
+        if not has_assign_op:
+            return None
+
+        # Check if LHS is a call to 'method'
+        lhs_node = children[0]
+        if lhs_node.type != "call":
+            return None
+
+        # Extract generic function and class name from method(generic, Class)
+        generic_name = None
+        class_name = None
+
+        for child in lhs_node.children:
+            if child.type == "identifier":
+                func_name = self._safe_decode(source[child.start_byte : child.end_byte])
+                if func_name != "method":
+                    return None
+            elif child.type == "arguments":
+                # Extract the two arguments: generic and class
+                args = [c for c in child.children if c.type == "argument"]
+                if len(args) >= 2:
+                    # First argument: generic function name
+                    for arg_child in args[0].children:
+                        if arg_child.type == "identifier":
+                            generic_name = self._safe_decode(
+                                source[arg_child.start_byte : arg_child.end_byte]
+                            )
+                            break
+                    # Second argument: class name
+                    for arg_child in args[1].children:
+                        if arg_child.type == "identifier":
+                            class_name = self._safe_decode(
+                                source[arg_child.start_byte : arg_child.end_byte]
+                            )
+                            break
+
+        if not generic_name or not class_name:
+            return None
+
+        # Get RHS function definition
+        func_node = None
+        if assign_idx + 1 < len(children):
+            rhs = children[assign_idx + 1]
+            if rhs.type == "function_definition":
+                func_node = rhs
+
+        if not func_node:
+            return None
+
+        # Extract parameters from function definition
+        params = []
+        for func_child in func_node.children:
+            if func_child.type == "parameters":
+                params = self._extract_r_params(func_child, source)
+                break
+
+        # Create method name as generic.ClassName
+        method_name = f"{generic_name}.{class_name}"
+
+        # Try to extract docstring (roxygen comments above the assignment)
+        docstring = self._extract_r_docstring(node, source)
+
+        return FunctionInfo(
+            name=method_name,
+            params=params,
+            return_type=None,  # R doesn't have static types
+            docstring=docstring,
+            is_method=True,
+            line_number=node.start_point[0] + 1,
+        )
 
     def _extract_r_function_assignment(
         self, node, source: bytes
