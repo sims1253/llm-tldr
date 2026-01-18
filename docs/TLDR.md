@@ -778,6 +778,7 @@ Wraps language-specific type checkers and linters:
 | C# | dotnet build | - |
 | Scala | scalac | - |
 | Elixir | mix compile | credo |
+| R | - | lintr |
 
 Tools are optional - if not installed, silently skipped.
 
