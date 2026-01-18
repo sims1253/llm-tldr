@@ -931,6 +931,42 @@ def extract_elixir_pdg(source_code: str, function_name: str) -> PDGInfo | None:
 
 
 # =============================================================================
+
+
+# =============================================================================
+# R PDG Extraction
+# =============================================================================
+
+
+def extract_r_pdg(source_code: str, function_name: str) -> PDGInfo | None:
+    """
+    Extract PDG for an R function.
+
+    Args:
+        source_code: R source code
+        function_name: Name of function to analyze
+
+    Returns:
+        PDGInfo with combined control/data flow, or None if function not found
+    """
+    try:
+        from .cfg_extractor import extract_r_cfg
+        from .dfg_extractor import extract_r_dfg
+
+        cfg = extract_r_cfg(source_code, function_name)
+        if cfg is None:
+            return None
+
+        dfg = extract_r_dfg(source_code, function_name)
+        if dfg is None:
+            return None
+
+        builder = PDGBuilder(cfg, dfg)
+        return builder.build()
+    except ValueError:
+        return None
+
+
 # Multi-language convenience function
 # =============================================================================
 
@@ -965,6 +1001,7 @@ def extract_pdg(source_code: str, function_name: str, language: str) -> PDGInfo 
         "lua": extract_lua_pdg,
         "luau": extract_luau_pdg,
         "elixir": extract_elixir_pdg,
+        "r": extract_r_pdg,
     }
 
     extractor = extractors.get(language.lower())

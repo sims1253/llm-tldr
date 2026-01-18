@@ -18,6 +18,7 @@ Supports:
 - C#: dotnet build (type checker)
 - Scala: scalac (type checker)
 - Elixir: mix compile (type checker) + credo (linter)
+- R: lintr (linter)
 """
 
 import json
@@ -90,6 +91,10 @@ LANG_TOOLS: dict[str, dict] = {
         "type_checker": "mix compile",
         "linter": "credo",
     },
+    "r": {
+        "type_checker": None,
+        "linter": "lintr",
+    },
 }
 
 
@@ -119,6 +124,8 @@ def _detect_language(file_path: str) -> str:
         ".scala": "scala",
         ".ex": "elixir",
         ".exs": "elixir",
+        ".r": "r",
+        ".R": "r",
     }
     return mapping.get(ext, "unknown")
 
@@ -129,15 +136,18 @@ def _parse_pyright_output(stdout: str) -> list[dict]:
         data = json.loads(stdout)
         diagnostics = []
         for diag in data.get("generalDiagnostics", []):
-            diagnostics.append({
-                "file": diag.get("file", ""),
-                "line": diag.get("range", {}).get("start", {}).get("line", 0) + 1,
-                "column": diag.get("range", {}).get("start", {}).get("character", 0) + 1,
-                "severity": diag.get("severity", "error"),
-                "message": diag.get("message", ""),
-                "rule": diag.get("rule", ""),
-                "source": "pyright",
-            })
+            diagnostics.append(
+                {
+                    "file": diag.get("file", ""),
+                    "line": diag.get("range", {}).get("start", {}).get("line", 0) + 1,
+                    "column": diag.get("range", {}).get("start", {}).get("character", 0)
+                    + 1,
+                    "severity": diag.get("severity", "error"),
+                    "message": diag.get("message", ""),
+                    "rule": diag.get("rule", ""),
+                    "source": "pyright",
+                }
+            )
         return diagnostics
     except json.JSONDecodeError:
         return []
@@ -149,15 +159,17 @@ def _parse_ruff_output(stdout: str) -> list[dict]:
         data = json.loads(stdout)
         diagnostics = []
         for diag in data:
-            diagnostics.append({
-                "file": diag.get("filename", ""),
-                "line": diag.get("location", {}).get("row", 0),
-                "column": diag.get("location", {}).get("column", 0),
-                "severity": "warning",  # ruff is mostly lint warnings
-                "message": diag.get("message", ""),
-                "rule": diag.get("code", ""),
-                "source": "ruff",
-            })
+            diagnostics.append(
+                {
+                    "file": diag.get("filename", ""),
+                    "line": diag.get("location", {}).get("row", 0),
+                    "column": diag.get("location", {}).get("column", 0),
+                    "severity": "warning",  # ruff is mostly lint warnings
+                    "message": diag.get("message", ""),
+                    "rule": diag.get("code", ""),
+                    "source": "ruff",
+                }
+            )
         return diagnostics
     except json.JSONDecodeError:
         return []
@@ -171,15 +183,17 @@ def _parse_tsc_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(1),
-                "line": int(match.group(2)),
-                "column": int(match.group(3)),
-                "severity": match.group(4),
-                "message": match.group(6),
-                "rule": match.group(5),
-                "source": "tsc",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(1),
+                    "line": int(match.group(2)),
+                    "column": int(match.group(3)),
+                    "severity": match.group(4),
+                    "message": match.group(6),
+                    "rule": match.group(5),
+                    "source": "tsc",
+                }
+            )
     return diagnostics
 
 
@@ -193,15 +207,17 @@ def _parse_go_vet_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(1),
-                "line": int(match.group(2)),
-                "column": int(match.group(3)),
-                "severity": "error",
-                "message": match.group(4),
-                "rule": "",
-                "source": "go vet",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(1),
+                    "line": int(match.group(2)),
+                    "column": int(match.group(3)),
+                    "severity": "error",
+                    "message": match.group(4),
+                    "rule": "",
+                    "source": "go vet",
+                }
+            )
     return diagnostics
 
 
@@ -212,15 +228,17 @@ def _parse_golangci_lint_output(stdout: str) -> list[dict]:
         diagnostics = []
         for issue in data.get("Issues", []):
             pos = issue.get("Pos", {})
-            diagnostics.append({
-                "file": pos.get("Filename", ""),
-                "line": pos.get("Line", 0),
-                "column": pos.get("Column", 0),
-                "severity": "warning",
-                "message": issue.get("Text", ""),
-                "rule": issue.get("FromLinter", ""),
-                "source": "golangci-lint",
-            })
+            diagnostics.append(
+                {
+                    "file": pos.get("Filename", ""),
+                    "line": pos.get("Line", 0),
+                    "column": pos.get("Column", 0),
+                    "severity": "warning",
+                    "message": issue.get("Text", ""),
+                    "rule": issue.get("FromLinter", ""),
+                    "source": "golangci-lint",
+                }
+            )
         return diagnostics
     except json.JSONDecodeError:
         return []
@@ -243,15 +261,17 @@ def _parse_cargo_check_output(stdout: str) -> list[dict]:
                 continue
             span = spans[0]
             code = msg.get("code", {})
-            diagnostics.append({
-                "file": span.get("file_name", ""),
-                "line": span.get("line_start", 0),
-                "column": span.get("column_start", 0),
-                "severity": msg.get("level", "error"),
-                "message": msg.get("message", ""),
-                "rule": code.get("code", "") if code else "",
-                "source": "cargo",
-            })
+            diagnostics.append(
+                {
+                    "file": span.get("file_name", ""),
+                    "line": span.get("line_start", 0),
+                    "column": span.get("column_start", 0),
+                    "severity": msg.get("level", "error"),
+                    "message": msg.get("message", ""),
+                    "rule": code.get("code", "") if code else "",
+                    "source": "cargo",
+                }
+            )
         except json.JSONDecodeError:
             continue
     return diagnostics
@@ -274,15 +294,17 @@ def _parse_clippy_output(stdout: str) -> list[dict]:
                 continue
             span = spans[0]
             code = msg.get("code", {})
-            diagnostics.append({
-                "file": span.get("file_name", ""),
-                "line": span.get("line_start", 0),
-                "column": span.get("column_start", 0),
-                "severity": msg.get("level", "warning"),
-                "message": msg.get("message", ""),
-                "rule": code.get("code", "") if code else "",
-                "source": "clippy",
-            })
+            diagnostics.append(
+                {
+                    "file": span.get("file_name", ""),
+                    "line": span.get("line_start", 0),
+                    "column": span.get("column_start", 0),
+                    "severity": msg.get("level", "warning"),
+                    "message": msg.get("message", ""),
+                    "rule": code.get("code", "") if code else "",
+                    "source": "clippy",
+                }
+            )
         except json.JSONDecodeError:
             continue
     return diagnostics
@@ -297,15 +319,17 @@ def _parse_rubocop_output(stdout: str) -> list[dict]:
             file_path = file_info.get("path", "")
             for offense in file_info.get("offenses", []):
                 loc = offense.get("location", {})
-                diagnostics.append({
-                    "file": file_path,
-                    "line": loc.get("line", 0),
-                    "column": loc.get("column", 0),
-                    "severity": offense.get("severity", "warning"),
-                    "message": offense.get("message", ""),
-                    "rule": offense.get("cop_name", ""),
-                    "source": "rubocop",
-                })
+                diagnostics.append(
+                    {
+                        "file": file_path,
+                        "line": loc.get("line", 0),
+                        "column": loc.get("column", 0),
+                        "severity": offense.get("severity", "warning"),
+                        "message": offense.get("message", ""),
+                        "rule": offense.get("cop_name", ""),
+                        "source": "rubocop",
+                    }
+                )
         return diagnostics
     except json.JSONDecodeError:
         return []
@@ -318,15 +342,17 @@ def _parse_phpstan_output(stdout: str) -> list[dict]:
         diagnostics = []
         for file_path, file_info in data.get("files", {}).items():
             for msg in file_info.get("messages", []):
-                diagnostics.append({
-                    "file": file_path,
-                    "line": msg.get("line", 0),
-                    "column": 0,  # phpstan doesn't provide column
-                    "severity": "error",
-                    "message": msg.get("message", ""),
-                    "rule": "",
-                    "source": "phpstan",
-                })
+                diagnostics.append(
+                    {
+                        "file": file_path,
+                        "line": msg.get("line", 0),
+                        "column": 0,  # phpstan doesn't provide column
+                        "severity": "error",
+                        "message": msg.get("message", ""),
+                        "rule": "",
+                        "source": "phpstan",
+                    }
+                )
         return diagnostics
     except json.JSONDecodeError:
         return []
@@ -340,15 +366,17 @@ def _parse_ktlint_output(stdout: str) -> list[dict]:
         for file_info in data:
             file_path = file_info.get("file", "")
             for error in file_info.get("errors", []):
-                diagnostics.append({
-                    "file": file_path,
-                    "line": error.get("line", 0),
-                    "column": error.get("column", 0),
-                    "severity": "warning",
-                    "message": error.get("message", ""),
-                    "rule": error.get("rule", ""),
-                    "source": "ktlint",
-                })
+                diagnostics.append(
+                    {
+                        "file": file_path,
+                        "line": error.get("line", 0),
+                        "column": error.get("column", 0),
+                        "severity": "warning",
+                        "message": error.get("message", ""),
+                        "rule": error.get("rule", ""),
+                        "source": "ktlint",
+                    }
+                )
         return diagnostics
     except json.JSONDecodeError:
         return []
@@ -360,15 +388,17 @@ def _parse_swiftlint_output(stdout: str) -> list[dict]:
         data = json.loads(stdout)
         diagnostics = []
         for item in data:
-            diagnostics.append({
-                "file": item.get("file", ""),
-                "line": item.get("line", 0),
-                "column": item.get("column", 0),
-                "severity": item.get("severity", "warning").lower(),
-                "message": item.get("reason", ""),
-                "rule": item.get("rule_id", ""),
-                "source": "swiftlint",
-            })
+            diagnostics.append(
+                {
+                    "file": item.get("file", ""),
+                    "line": item.get("line", 0),
+                    "column": item.get("column", 0),
+                    "severity": item.get("severity", "warning").lower(),
+                    "message": item.get("reason", ""),
+                    "rule": item.get("rule_id", ""),
+                    "source": "swiftlint",
+                }
+            )
         return diagnostics
     except json.JSONDecodeError:
         return []
@@ -384,15 +414,17 @@ def _parse_cppcheck_output(stdout: str) -> list[dict]:
         for error in root.findall(".//error"):
             location = error.find("location")
             if location is not None:
-                diagnostics.append({
-                    "file": location.get("file", ""),
-                    "line": int(location.get("line", 0)),
-                    "column": int(location.get("column", 0)),
-                    "severity": error.get("severity", "error"),
-                    "message": error.get("msg", ""),
-                    "rule": error.get("id", ""),
-                    "source": "cppcheck",
-                })
+                diagnostics.append(
+                    {
+                        "file": location.get("file", ""),
+                        "line": int(location.get("line", 0)),
+                        "column": int(location.get("column", 0)),
+                        "severity": error.get("severity", "error"),
+                        "message": error.get("msg", ""),
+                        "rule": error.get("id", ""),
+                        "source": "cppcheck",
+                    }
+                )
         return diagnostics
     except ElementTree.ParseError:
         return []
@@ -404,15 +436,42 @@ def _parse_credo_output(stdout: str) -> list[dict]:
         data = json.loads(stdout)
         diagnostics = []
         for issue in data.get("issues", []):
-            diagnostics.append({
-                "file": issue.get("filename", ""),
-                "line": issue.get("line_no", 0),
-                "column": issue.get("column", 0),
-                "severity": "warning",
-                "message": issue.get("message", ""),
-                "rule": issue.get("check", ""),
-                "source": "credo",
-            })
+            diagnostics.append(
+                {
+                    "file": issue.get("filename", ""),
+                    "line": issue.get("line_no", 0),
+                    "column": issue.get("column", 0),
+                    "severity": "warning",
+                    "message": issue.get("message", ""),
+                    "rule": issue.get("check", ""),
+                    "source": "credo",
+                }
+            )
+        return diagnostics
+    except json.JSONDecodeError:
+        return []
+
+
+def _parse_lintr_output(stdout: str) -> list[dict]:
+    """Parse lintr JSON output into structured diagnostics."""
+    try:
+        data = json.loads(stdout)
+        diagnostics = []
+        for diag in data:
+            severity = "warning"
+            if diag.get("type") == "error":
+                severity = "error"
+            diagnostics.append(
+                {
+                    "file": diag.get("filename", ""),
+                    "line": diag.get("line_number", 0),
+                    "column": diag.get("column_number", 0),
+                    "severity": severity,
+                    "message": diag.get("message", ""),
+                    "rule": diag.get("linter", ""),
+                    "source": "lintr",
+                }
+            )
         return diagnostics
     except json.JSONDecodeError:
         return []
@@ -428,15 +487,17 @@ def _parse_javac_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(1),
-                "line": int(match.group(2)),
-                "column": 0,
-                "severity": match.group(3),
-                "message": match.group(4),
-                "rule": "",
-                "source": "javac",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(1),
+                    "line": int(match.group(2)),
+                    "column": 0,
+                    "severity": match.group(3),
+                    "message": match.group(4),
+                    "rule": "",
+                    "source": "javac",
+                }
+            )
     return diagnostics
 
 
@@ -450,15 +511,17 @@ def _parse_checkstyle_output(stdout: str) -> list[dict]:
         for file_elem in root.findall("file"):
             file_path = file_elem.get("name", "")
             for error in file_elem.findall("error"):
-                diagnostics.append({
-                    "file": file_path,
-                    "line": int(error.get("line", 0)),
-                    "column": int(error.get("column", 0)),
-                    "severity": error.get("severity", "warning"),
-                    "message": error.get("message", ""),
-                    "rule": error.get("source", "").split(".")[-1],
-                    "source": "checkstyle",
-                })
+                diagnostics.append(
+                    {
+                        "file": file_path,
+                        "line": int(error.get("line", 0)),
+                        "column": int(error.get("column", 0)),
+                        "severity": error.get("severity", "warning"),
+                        "message": error.get("message", ""),
+                        "rule": error.get("source", "").split(".")[-1],
+                        "source": "checkstyle",
+                    }
+                )
         return diagnostics
     except ElementTree.ParseError:
         return []
@@ -474,15 +537,17 @@ def _parse_gcc_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(1),
-                "line": int(match.group(2)),
-                "column": int(match.group(3)),
-                "severity": match.group(4),
-                "message": match.group(5),
-                "rule": "",
-                "source": "gcc",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(1),
+                    "line": int(match.group(2)),
+                    "column": int(match.group(3)),
+                    "severity": match.group(4),
+                    "message": match.group(5),
+                    "rule": "",
+                    "source": "gcc",
+                }
+            )
     return diagnostics
 
 
@@ -496,15 +561,17 @@ def _parse_kotlinc_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(1),
-                "line": int(match.group(2)),
-                "column": int(match.group(3)),
-                "severity": match.group(4),
-                "message": match.group(5),
-                "rule": "",
-                "source": "kotlinc",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(1),
+                    "line": int(match.group(2)),
+                    "column": int(match.group(3)),
+                    "severity": match.group(4),
+                    "message": match.group(5),
+                    "rule": "",
+                    "source": "kotlinc",
+                }
+            )
     return diagnostics
 
 
@@ -518,15 +585,17 @@ def _parse_swiftc_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(1),
-                "line": int(match.group(2)),
-                "column": int(match.group(3)),
-                "severity": match.group(4),
-                "message": match.group(5),
-                "rule": "",
-                "source": "swiftc",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(1),
+                    "line": int(match.group(2)),
+                    "column": int(match.group(3)),
+                    "severity": match.group(4),
+                    "message": match.group(5),
+                    "rule": "",
+                    "source": "swiftc",
+                }
+            )
     return diagnostics
 
 
@@ -540,15 +609,17 @@ def _parse_dotnet_build_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(1),
-                "line": int(match.group(2)),
-                "column": int(match.group(3)),
-                "severity": match.group(4),
-                "message": match.group(6),
-                "rule": match.group(5),
-                "source": "dotnet",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(1),
+                    "line": int(match.group(2)),
+                    "column": int(match.group(3)),
+                    "severity": match.group(4),
+                    "message": match.group(6),
+                    "rule": match.group(5),
+                    "source": "dotnet",
+                }
+            )
     return diagnostics
 
 
@@ -562,15 +633,17 @@ def _parse_scalac_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(1),
-                "line": int(match.group(2)),
-                "column": 0,
-                "severity": match.group(3),
-                "message": match.group(4),
-                "rule": "",
-                "source": "scalac",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(1),
+                    "line": int(match.group(2)),
+                    "column": 0,
+                    "severity": match.group(3),
+                    "message": match.group(4),
+                    "rule": "",
+                    "source": "scalac",
+                }
+            )
     return diagnostics
 
 
@@ -586,15 +659,17 @@ def _parse_mix_compile_output(stderr: str) -> list[dict]:
     for line in stderr.strip().split("\n"):
         match = re.match(pattern, line)
         if match:
-            diagnostics.append({
-                "file": match.group(2),
-                "line": int(match.group(3)),
-                "column": 0,
-                "severity": "error" if "Error" in match.group(1) else "warning",
-                "message": match.group(4),
-                "rule": "",
-                "source": "mix",
-            })
+            diagnostics.append(
+                {
+                    "file": match.group(2),
+                    "line": int(match.group(3)),
+                    "column": 0,
+                    "severity": "error" if "Error" in match.group(1) else "warning",
+                    "message": match.group(4),
+                    "rule": "",
+                    "source": "mix",
+                }
+            )
     return diagnostics
 
 
@@ -936,6 +1011,29 @@ def get_diagnostics(
             except subprocess.TimeoutExpired:
                 pass
 
+    elif lang == "r":
+        # No type checker for R (dynamically typed)
+        # Run lintr for linting
+        if include_lint and shutil.which("Rscript"):
+            try:
+                # lintr is an R package, run via Rscript
+                result = subprocess.run(
+                    [
+                        "Rscript",
+                        "-e",
+                        "args <- commandArgs(trailingOnly=TRUE); cat(jsonlite::toJSON(lintr::lint(args[1]), auto_unbox=TRUE))",
+                        "--",
+                        str(path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                all_diagnostics.extend(_parse_lintr_output(result.stdout))
+                tools_used.append("lintr")
+            except subprocess.TimeoutExpired:
+                pass
+
     # Sort by line number
     all_diagnostics.sort(key=lambda d: (d.get("file", ""), d.get("line", 0)))
 
@@ -945,7 +1043,9 @@ def get_diagnostics(
         "tools": tools_used,
         "diagnostics": all_diagnostics,
         "error_count": sum(1 for d in all_diagnostics if d.get("severity") == "error"),
-        "warning_count": sum(1 for d in all_diagnostics if d.get("severity") == "warning"),
+        "warning_count": sum(
+            1 for d in all_diagnostics if d.get("severity") == "warning"
+        ),
     }
 
 
@@ -1122,6 +1222,27 @@ def get_project_diagnostics(
             except subprocess.TimeoutExpired:
                 pass
 
+    elif language == "r":
+        # Run lintr on project
+        if include_lint and shutil.which("Rscript"):
+            try:
+                # lintr is an R package, run via Rscript
+                result = subprocess.run(
+                    [
+                        "Rscript",
+                        "-e",
+                        'cat(jsonlite::toJSON(lintr::lint("."), auto_unbox=TRUE))',
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    cwd=str(path),
+                )
+                all_diagnostics.extend(_parse_lintr_output(result.stdout))
+                tools_used.append("lintr")
+            except subprocess.TimeoutExpired:
+                pass
+
     # Sort by file, then line
     all_diagnostics.sort(key=lambda d: (d.get("file", ""), d.get("line", 0)))
 
@@ -1131,7 +1252,9 @@ def get_project_diagnostics(
         "tools": tools_used,
         "diagnostics": all_diagnostics,
         "error_count": sum(1 for d in all_diagnostics if d.get("severity") == "error"),
-        "warning_count": sum(1 for d in all_diagnostics if d.get("severity") == "warning"),
+        "warning_count": sum(
+            1 for d in all_diagnostics if d.get("severity") == "warning"
+        ),
         "file_count": len(set(d.get("file", "") for d in all_diagnostics)),
     }
 
@@ -1156,6 +1279,8 @@ def format_diagnostics_for_llm(result: dict) -> str:
     for d in diagnostics:
         severity = "E" if d.get("severity") == "error" else "W"
         rule = f" [{d['rule']}]" if d.get("rule") else ""
-        lines.append(f"{severity} {d['file']}:{d['line']}:{d['column']}: {d['message']}{rule}")
+        lines.append(
+            f"{severity} {d['file']}:{d['line']}:{d['column']}: {d['message']}{rule}"
+        )
 
     return "\n".join(lines)

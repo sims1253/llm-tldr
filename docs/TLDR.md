@@ -215,6 +215,7 @@ Tree-sitter parsers under the hood mean **one interface, 16 languages:**
 | Swift | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ Basic |
 | Lua | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ Basic |
 | Elixir | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ Basic |
+| R | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ Full |
 
 **\*Semantic embeddings:**
 - **Full**: Embeddings include all 5 layers (signature, call graph, CFG complexity, DFG variables, dependencies)
@@ -226,6 +227,39 @@ Tree-sitter parsers under the hood mean **one interface, 16 languages:**
 # Same commands, different languages
 tldr context main --project ./go-service --lang go
 tldr impact processRequest ./rust-api --lang rust
+```
+
+### R Language Support
+
+R support requires the `[r]` extra for tree-sitter-r compilation:
+
+```bash
+pip install llm-tldr[r]
+# or
+uv pip install -e ".[r]"
+```
+
+**R-specific syntax handling:**
+- **`repeat` loops**: CFG analysis supports R's infinite loop construct with `break` for termination. Body is treated as a braced expression block.
+- **`switch()` calls**: Parsed as function calls (not statements), enabling proper call graph analysis for switch-style dispatch.
+- **Rightward assignment**: DFG analysis handles `->` and `->>` operators with variable targets on the right side.
+- **For loop variables**: Iterator variables are properly tracked in data flow.
+
+**S7 class and method extraction:**
+S7 is R's modern OOP system. TLDR extracts:
+- Class definitions
+- Method implementations with `generic.ClassName` naming convention (e.g., `print.Person`)
+- Method-to-class bindings
+
+```bash
+# Analyze an R file
+tldr extract analysis.R --lang r
+
+# Get function context
+tldr context my_function --project ./r-project --lang r
+
+# Trace data flow
+tldr dfg analysis.R process_data --lang r
 ```
 
 ---
@@ -744,6 +778,7 @@ Wraps language-specific type checkers and linters:
 | C# | dotnet build | - |
 | Scala | scalac | - |
 | Elixir | mix compile | credo |
+| R | - | lintr |
 
 Tools are optional - if not installed, silently skipped.
 
@@ -1148,32 +1183,46 @@ tldr arch src/  # See layer structure
 
 ## Installation
 
+### Option A: pip (traditional)
+
 ```bash
-# From PyPI
-pip install tldr-code
+pip install llm-tldr
 
-# With all language support
-pip install tldr-code[all]
+# With R support
+pip install llm-tldr[r]
+```
 
-# Development install
-git clone https://github.com/yourusername/tldr-code
-cd tldr-code
-pip install -e ".[dev]"
+### Option B: uvx (zero-install, run directly)
+
+```bash
+uvx llm-tldr warm .
+uvx llm-tldr semantic "query" .
+
+# With R support
+uvx --with 'llm-tldr[r]' llm-tldr <command>
+```
+
+### Option C: uv (faster pip alternative)
+
+```bash
+uv pip install llm-tldr
+```
+
+### Development install:
+
+```bash
+git clone https://github.com/sims1253/llm-tldr
+cd llm-tldr
+uv pip install -e ".[dev,r]"
 ```
 
 ### Dependencies
 
-```bash
-# Core
-pip install tree-sitter tree-sitter-languages
+Dependencies are installed automatically. For reference:
 
-# Semantic search (optional)
-pip install sentence-transformers faiss-cpu
-
-# Language-specific parsers
-pip install tree-sitter-python tree-sitter-typescript
-pip install tree-sitter-javascript tree-sitter-go tree-sitter-rust
-```
+- **Core**: tree-sitter, tree-sitter-languages
+- **Semantic search**: sentence-transformers, faiss-cpu
+- **R support**: tree-sitter-r (built from source, requires git)
 
 ---
 

@@ -29,24 +29,28 @@ try:
     from tree_sitter import Language, Parser, Tree
     import tree_sitter_typescript
     import tree_sitter_javascript
+
     TREE_SITTER_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_python
+
     TREE_SITTER_PYTHON_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_go
+
     TREE_SITTER_GO_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_rust
+
     TREE_SITTER_RUST_AVAILABLE = True
 except ImportError:
     pass
@@ -54,6 +58,7 @@ except ImportError:
 TREE_SITTER_LUA_AVAILABLE = False
 try:
     import tree_sitter_lua
+
     TREE_SITTER_LUA_AVAILABLE = True
 except ImportError:
     pass
@@ -61,6 +66,7 @@ except ImportError:
 TREE_SITTER_LUAU_AVAILABLE = False
 try:
     import tree_sitter_luau
+
     TREE_SITTER_LUAU_AVAILABLE = True
 except ImportError:
     pass
@@ -68,6 +74,7 @@ except ImportError:
 TREE_SITTER_JAVA_AVAILABLE = False
 try:
     import tree_sitter_java
+
     TREE_SITTER_JAVA_AVAILABLE = True
 except ImportError:
     pass
@@ -75,6 +82,7 @@ except ImportError:
 TREE_SITTER_C_AVAILABLE = False
 try:
     import tree_sitter_c
+
     TREE_SITTER_C_AVAILABLE = True
 except ImportError:
     pass
@@ -82,6 +90,7 @@ except ImportError:
 TREE_SITTER_CPP_AVAILABLE = False
 try:
     import tree_sitter_cpp
+
     TREE_SITTER_CPP_AVAILABLE = True
 except ImportError:
     pass
@@ -89,6 +98,7 @@ except ImportError:
 TREE_SITTER_RUBY_AVAILABLE = False
 try:
     import tree_sitter_ruby
+
     TREE_SITTER_RUBY_AVAILABLE = True
 except ImportError:
     pass
@@ -96,6 +106,7 @@ except ImportError:
 TREE_SITTER_PHP_AVAILABLE = False
 try:
     import tree_sitter_php
+
     TREE_SITTER_PHP_AVAILABLE = True
 except ImportError:
     pass
@@ -103,6 +114,7 @@ except ImportError:
 TREE_SITTER_CSHARP_AVAILABLE = False
 try:
     import tree_sitter_c_sharp
+
     TREE_SITTER_CSHARP_AVAILABLE = True
 except ImportError:
     pass
@@ -110,6 +122,7 @@ except ImportError:
 TREE_SITTER_KOTLIN_AVAILABLE = False
 try:
     import tree_sitter_kotlin
+
     TREE_SITTER_KOTLIN_AVAILABLE = True
 except ImportError:
     pass
@@ -117,6 +130,7 @@ except ImportError:
 TREE_SITTER_SCALA_AVAILABLE = False
 try:
     import tree_sitter_scala
+
     TREE_SITTER_SCALA_AVAILABLE = True
 except ImportError:
     pass
@@ -124,7 +138,16 @@ except ImportError:
 TREE_SITTER_ELIXIR_AVAILABLE = False
 try:
     import tree_sitter_elixir
+
     TREE_SITTER_ELIXIR_AVAILABLE = True
+except ImportError:
+    pass
+
+TREE_SITTER_R_AVAILABLE = False
+try:
+    import tree_sitter_r
+
+    TREE_SITTER_R_AVAILABLE = True
 except ImportError:
     pass
 
@@ -267,9 +290,7 @@ class TreeCache:
             try:
                 with open(self._index_path) as f:
                     data = json.load(f)
-                self._index = {
-                    k: CacheEntry(**v) for k, v in data.items()
-                }
+                self._index = {k: CacheEntry(**v) for k, v in data.items()}
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to load cache index: {e}")
                 self._index = {}
@@ -339,6 +360,7 @@ class TreeCache:
             ".py": "python",
             ".go": "go",
             ".rs": "rust",
+            ".r": "r",
         }
         return lang_map.get(suffix, "unknown")
 
@@ -497,6 +519,11 @@ def _get_parser(language: str) -> Optional[Any]:
             parser.language = Language(tree_sitter_elixir.language())
         else:
             return None
+    elif language == "r":
+        if TREE_SITTER_R_AVAILABLE:
+            parser.language = Language(tree_sitter_r.language())
+        else:
+            return None
     else:
         return None
 
@@ -510,9 +537,24 @@ class IncrementalParser:
     """
 
     SUPPORTED_LANGUAGES = {
-        "typescript", "tsx", "javascript", "python", "go", "rust",
-        "lua", "luau", "java", "c", "cpp", "ruby", "php", "csharp",
-        "kotlin", "scala", "elixir"
+        "typescript",
+        "tsx",
+        "javascript",
+        "python",
+        "go",
+        "rust",
+        "lua",
+        "luau",
+        "java",
+        "c",
+        "cpp",
+        "ruby",
+        "php",
+        "csharp",
+        "kotlin",
+        "scala",
+        "elixir",
+        "r",
     }
 
     def __init__(self, cache_dir: Optional[Path] = None):

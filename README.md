@@ -7,8 +7,11 @@
 **Give LLMs exactly the code they need. Nothing more.**
 
 ```bash
-# One-liner: Install, index, search
+# With pip
 pip install llm-tldr && tldr warm . && tldr semantic "what you're looking for" .
+
+# Or zero-install with uvx
+uvx llm-tldr warm . && uvx llm-tldr semantic "what you're looking for" .
 ```
 
 Your codebase is 100K lines. Claude's context window is 200K tokens. Raw code won't fit—and even if it did, the LLM would drown in irrelevant details.
@@ -174,8 +177,20 @@ tldr semantic "validate JWT tokens" .   # Natural language search
 
 ### 1. Install
 
+**Option A: pip (traditional)**
 ```bash
 pip install llm-tldr
+```
+
+**Option B: uvx (zero-install, run directly)**
+```bash
+uvx llm-tldr warm .
+uvx llm-tldr semantic "query" .
+```
+
+**Option C: uv (faster pip alternative)**
+```bash
+uv pip install llm-tldr
 ```
 
 ### 2. Index Your Project
@@ -276,9 +291,14 @@ The bug is obvious. Line 28 uses `user` without going through the null check pat
 
 ## Supported Languages
 
-Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, PHP, C#, Kotlin, Scala, Swift, Lua, Elixir
+Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, PHP, C#, Kotlin, Scala, Swift, Lua, Elixir, R
 
 Language is auto-detected or specify with `--lang`.
+
+**R Support:** Install with `pip install llm-tldr[r]`, `uv pip install -e ".[r]"`, or `uvx --with 'llm-tldr[r]' llm-tldr <command>` (requires git to build tree-sitter-r from source). R support includes:
+- Full CFG analysis with `repeat` loops and `switch()` calls
+- DFG analysis with rightward assignment (`->`, `->>`) operators
+- S7 class and method extraction (modern R OOP)
 
 ---
 
@@ -309,6 +329,14 @@ For AI tools (Claude Desktop, Claude Code):
   }
 }
 ```
+
+**OpenCode** - Copy the skill to your OpenCode config:
+```bash
+mkdir -p ~/.config/opencode/skill/tldr-code-analysis
+cp contrib/opencode-skill/SKILL.md ~/.config/opencode/skill/tldr-code-analysis/
+```
+
+The skill provides portable invocation via `uvx` without requiring local installation.
 
 ---
 

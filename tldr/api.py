@@ -70,6 +70,7 @@ from .cfg_extractor import (
     extract_luau_cfg,
     extract_php_cfg,
     extract_python_cfg,
+    extract_r_cfg,
     extract_ruby_cfg,
     extract_rust_cfg,
     extract_scala_cfg,
@@ -132,6 +133,9 @@ from .cross_file_calls import (
     parse_elixir_imports as _parse_elixir_imports,
 )
 from .cross_file_calls import (
+    parse_r_imports as _parse_r_imports,
+)
+from .cross_file_calls import (
     scan_project as _scan_project,
 )
 from .dfg_extractor import (
@@ -147,6 +151,7 @@ from .dfg_extractor import (
     extract_luau_dfg,
     extract_php_dfg,
     extract_python_dfg,
+    extract_r_dfg,
     extract_ruby_dfg,
     extract_rust_dfg,
     extract_scala_dfg,
@@ -165,6 +170,7 @@ from .pdg_extractor import (
     extract_go_pdg,
     extract_pdg,
     extract_python_pdg,
+    extract_r_pdg,
     extract_ruby_pdg,
     extract_rust_pdg,
     extract_typescript_pdg,
@@ -209,16 +215,19 @@ class PathTraversalError(ValueError):
     This is a security error indicating an attempted path traversal attack
     (e.g., using ../../../etc/passwd to escape the project directory).
     """
+
     pass
 
 
-def _validate_path_containment(file_path: str, base_path: str | None = None) -> Path:
+def _validate_path_containment(
+    file_path: str | Path, base_path: str | None = None
+) -> Path:
     """Validate that file_path doesn't escape base_path via traversal.
 
     Detects directory traversal attacks (../..) and symlink escapes.
 
     Args:
-        file_path: The path to validate
+        file_path: The path to validate (str or Path)
         base_path: Optional container directory. If None, detects traversal
                    patterns that escape the apparent starting directory.
 
@@ -229,12 +238,15 @@ def _validate_path_containment(file_path: str, base_path: str | None = None) -> 
         PathTraversalError: If path contains traversal or escapes base
         ValueError: If path is empty or whitespace-only
     """
+    # Convert Path to string for validation
+    file_path_str = str(file_path) if not isinstance(file_path, str) else file_path
+
     # Reject empty or whitespace-only paths
-    if not file_path or not file_path.strip():
+    if not file_path_str or not file_path_str.strip():
         raise ValueError("Path cannot be empty or whitespace-only")
 
     # Check for null bytes (path truncation attack)
-    if "\x00" in file_path:
+    if "\x00" in file_path_str:
         raise ValueError("Path contains null byte")
 
     # Resolve the path (follows symlinks, normalizes ..)
@@ -245,27 +257,27 @@ def _validate_path_containment(file_path: str, base_path: str | None = None) -> 
         raise ValueError(f"Invalid path: {e}")
 
     # Check for traversal patterns in original path
-    if ".." in file_path:
+    if ".." in file_path_str:
         if base_path:
             # Explicit base path provided - enforce containment
             base = Path(base_path).resolve()
             try:
                 if not resolved.is_relative_to(base):
                     raise PathTraversalError(
-                        f"Path '{file_path}' escapes base directory '{base_path}' via traversal"
+                        f"Path '{file_path_str}' escapes base directory '{base_path}' via traversal"
                     )
             except ValueError:
                 raise PathTraversalError(
-                    f"Path '{file_path}' escapes base directory '{base_path}'"
+                    f"Path '{file_path_str}' escapes base directory '{base_path}'"
                 )
         else:
             # No explicit base path - detect suspicious traversal patterns
             # A path like "/tmp/project/../outside/file.py" is suspicious because
-            # the ".." effectively escapes from "project" into a sibling directory
+            # ".." effectively escapes from "project" into a sibling directory
             #
             # Strategy: Find directory components that are "entered" then immediately
             # "exited" via .. - this indicates intentional escape
-            path_obj = Path(file_path)
+            path_obj = Path(file_path_str)
             parts = list(path_obj.parts)
 
             # Look for pattern: <dir>/.. which indicates entering then leaving a directory
@@ -375,6 +387,7 @@ def _resolve_source(source_or_path: str) -> tuple[str, str | None]:
 @dataclass
 class FunctionContext:
     """Context for a single function."""
+
     name: str
     file: str
     line: int
@@ -388,16 +401,14 @@ class FunctionContext:
 @dataclass
 class RelevantContext:
     """The full context returned by get_relevant_context."""
+
     entry_point: str
     depth: int
     functions: list[FunctionContext] = field(default_factory=list)
 
     def to_llm_string(self) -> str:
         """Format for LLM injection."""
-        lines = [
-            f"## Code Context: {self.entry_point} (depth={self.depth})",
-            ""
-        ]
+        lines = [f"## Code Context: {self.entry_point} (depth={self.depth})", ""]
 
         for i, func in enumerate(self.functions):
             # Indentation based on call depth
@@ -410,19 +421,23 @@ class RelevantContext:
 
             # Docstring (truncated)
             if func.docstring:
-                doc = func.docstring.split('\n')[0][:80]
+                doc = func.docstring.split("\n")[0][:80]
                 lines.append(f"{indent}   # {doc}")
 
             # Complexity
             if func.blocks is not None:
-                complexity_marker = "🔥" if func.cyclomatic and func.cyclomatic > 10 else ""
-                lines.append(f"{indent}   ⚡ complexity: {func.cyclomatic or '?'} ({func.blocks} blocks) {complexity_marker}")
+                complexity_marker = (
+                    "🔥" if func.cyclomatic and func.cyclomatic > 10 else ""
+                )
+                lines.append(
+                    f"{indent}   ⚡ complexity: {func.cyclomatic or '?'} ({func.blocks} blocks) {complexity_marker}"
+                )
 
             # Calls
             if func.calls:
                 calls_str = ", ".join(func.calls[:5])
                 if len(func.calls) > 5:
-                    calls_str += f" (+{len(func.calls)-5} more)"
+                    calls_str += f" (+{len(func.calls) - 5} more)"
                 lines.append(f"{indent}   → calls: {calls_str}")
 
             lines.append("")
@@ -430,14 +445,17 @@ class RelevantContext:
         # Footer with stats
         result = "\n".join(lines)
         token_estimate = len(result) // 4
-        return result + f"\n---\n📊 {len(self.functions)} functions | ~{token_estimate} tokens"
+        return (
+            result
+            + f"\n---\n📊 {len(self.functions)} functions | ~{token_estimate} tokens"
+        )
 
 
 def _get_module_exports(
     project: Path,
     module_path: str,
     language: str = "python",
-    include_docstrings: bool = True
+    include_docstrings: bool = True,
 ) -> "RelevantContext":
     """Get all exports from a module path.
 
@@ -454,7 +472,8 @@ def _get_module_exports(
         "python": ".py",
         "typescript": ".ts",
         "go": ".go",
-        "rust": ".rs"
+        "rust": ".rs",
+        "r": ".R",
     }
     ext = ext_map.get(language, ".py")
 
@@ -467,8 +486,15 @@ def _get_module_exports(
         init_file = project / module_path / "__init__.py"
         if init_file.exists():
             module_file = init_file
-        else:
-            raise ValueError(f"Module not found: {module_path} (tried {module_file} and {init_file})")
+        # Lowercase extension fallback for R
+        elif language == "r":
+            alt = project / f"{module_path}.r"
+            if alt.exists():
+                module_file = alt
+        if not module_file.exists():
+            raise ValueError(
+                f"Module not found: {module_path} (tried {module_file} and {init_file})"
+            )
 
     # Extract all functions and classes from the module
     extractor = HybridExtractor()
@@ -515,11 +541,7 @@ def _get_module_exports(
             )
             functions.append(method_ctx)
 
-    return RelevantContext(
-        entry_point=module_path,
-        depth=0,
-        functions=functions
-    )
+    return RelevantContext(entry_point=module_path, depth=0, functions=functions)
 
 
 def get_relevant_context(
@@ -527,7 +549,7 @@ def get_relevant_context(
     entry_point: str,
     depth: int = 2,
     language: str = "python",
-    include_docstrings: bool = True
+    include_docstrings: bool = True,
 ) -> RelevantContext:
     """
     Get token-efficient context for an LLM starting from an entry point.
@@ -554,7 +576,7 @@ def get_relevant_context(
         "python": ".py",
         "typescript": ".ts",
         "go": ".go",
-        "rust": ".rs"
+        "rust": ".rs",
     }.get(language, ".py")
 
     # NOTE: Removed module-file shortcut that conflicted with function lookup.
@@ -573,7 +595,8 @@ def get_relevant_context(
         "python": {".py"},
         "typescript": {".ts", ".tsx"},
         "go": {".go"},
-        "rust": {".rs"}
+        "rust": {".rs"},
+        "r": {".r", ".R"},
     }
     extensions = ext_map.get(language, {".py"})
 
@@ -584,7 +607,7 @@ def get_relevant_context(
         # Check for hidden paths relative to project root, not absolute path
         try:
             rel_path = file_path.relative_to(project)
-            is_hidden = any(p.startswith('.') for p in rel_path.parts)
+            is_hidden = any(p.startswith(".") for p in rel_path.parts)
         except ValueError:
             is_hidden = False  # Not relative to project, allow it
         if file_path.suffix in extensions and not is_hidden:
@@ -595,7 +618,9 @@ def get_relevant_context(
                 info = extractor.extract(str(file_path))
                 for func in info.functions:
                     # Primary key: module.function (e.g., "claude_spawn.spawn_agent")
-                    module_name = file_path.stem  # "claude_spawn" from "claude_spawn.py"
+                    module_name = (
+                        file_path.stem
+                    )  # "claude_spawn" from "claude_spawn.py"
                     qualified_key = f"{module_name}.{func.name}"
                     signatures[qualified_key] = (str(file_path), func)
 
@@ -641,6 +666,7 @@ def get_relevant_context(
         "lua": extract_lua_cfg,
         "luau": extract_luau_cfg,
         "elixir": extract_elixir_cfg,
+        "r": extract_r_cfg,
     }
     cfg_extractor_fn = cfg_extractors.get(language, extract_python_cfg)
 
@@ -666,8 +692,7 @@ def get_relevant_context(
             return []
 
         # Unqualified name - find all qualified matches
-        matches = [(k, v) for k, v in signatures.items()
-                   if k.endswith(f".{name}")]
+        matches = [(k, v) for k, v in signatures.items() if k.endswith(f".{name}")]
 
         if matches:
             # Return all matches (could be 1 or more)
@@ -714,9 +739,11 @@ def get_relevant_context(
                     line=func_info.line_number,
                     signature=func_info.signature(),
                     docstring=func_info.docstring if include_docstrings else None,
-                    calls=adjacency.get(func_info.name, []),  # Use unqualified for adjacency lookup
+                    calls=adjacency.get(
+                        func_info.name, []
+                    ),  # Use unqualified for adjacency lookup
                     blocks=blocks,
-                    cyclomatic=cyclomatic
+                    cyclomatic=cyclomatic,
                 )
                 result_functions.append(ctx)
 
@@ -731,7 +758,7 @@ def get_relevant_context(
                 file="?",
                 line=0,
                 signature=f"def {func_name}(...)",
-                calls=adjacency.get(func_name, [])
+                calls=adjacency.get(func_name, []),
             )
             result_functions.append(ctx)
 
@@ -741,16 +768,12 @@ def get_relevant_context(
                     queue.append((callee, current_depth + 1))
 
     return RelevantContext(
-        entry_point=entry_point,
-        depth=depth,
-        functions=result_functions
+        entry_point=entry_point, depth=depth, functions=result_functions
     )
 
 
 def get_dfg_context(
-    source_or_path: str,
-    function_name: str,
-    language: str = "python"
+    source_or_path: str, function_name: str, language: str = "python"
 ) -> dict:
     """
     Get data flow analysis for a function.
@@ -791,6 +814,7 @@ def get_dfg_context(
         "lua": extract_lua_dfg,
         "luau": extract_luau_dfg,
         "elixir": extract_elixir_dfg,
+        "r": extract_r_dfg,
     }
 
     # Default to Python for unknown languages
@@ -801,12 +825,7 @@ def get_dfg_context(
         return dfg_info.to_dict()
     except Exception:
         # Return empty DFG on extraction failure
-        return {
-            "function": function_name,
-            "refs": [],
-            "edges": [],
-            "variables": []
-        }
+        return {"function": function_name, "refs": [], "edges": [], "variables": []}
 
 
 # =============================================================================
@@ -815,9 +834,7 @@ def get_dfg_context(
 
 
 def get_cfg_context(
-    source_or_path: str,
-    function_name: str,
-    language: str = "python"
+    source_or_path: str, function_name: str, language: str = "python"
 ) -> dict:
     """
     Get control flow graph context for a function.
@@ -858,6 +875,7 @@ def get_cfg_context(
         "lua": extract_lua_cfg,
         "luau": extract_luau_cfg,
         "elixir": extract_elixir_cfg,
+        "r": extract_r_cfg,
     }
 
     extractor_fn = cfg_extractors.get(language, extract_python_cfg)
@@ -887,9 +905,7 @@ def get_cfg_context(
 
 
 def get_cfg_blocks(
-    source_or_path: str,
-    function_name: str,
-    language: str = "python"
+    source_or_path: str, function_name: str, language: str = "python"
 ) -> list[dict]:
     """
     Get CFG basic blocks for a function.
@@ -916,9 +932,7 @@ def get_cfg_blocks(
 
 
 def get_cfg_edges(
-    source_or_path: str,
-    function_name: str,
-    language: str = "python"
+    source_or_path: str, function_name: str, language: str = "python"
 ) -> list[dict]:
     """
     Get CFG control flow edges for a function.
@@ -944,10 +958,7 @@ def get_cfg_edges(
 
 
 def query(
-    project: str | Path,
-    query: str,
-    depth: int = 2,
-    language: str = "python"
+    project: str | Path, query: str, depth: int = 2, language: str = "python"
 ) -> str:
     """
     Convenience function that returns LLM-ready string directly.
@@ -969,10 +980,9 @@ def query(
 # PDG API Functions (Layer 5)
 # =============================================================================
 
+
 def get_pdg_context(
-    source_or_path: str,
-    function_name: str,
-    language: str = "python"
+    source_or_path: str, function_name: str, language: str = "python"
 ) -> dict | None:
     """
     Get program dependence graph context for a function.
@@ -1022,7 +1032,7 @@ def get_slice(
     line: int,
     direction: str = "backward",
     variable: str | None = None,
-    language: str = "python"
+    language: str = "python",
 ) -> set[int]:
     """
     Get program slice - lines affecting or affected by a given line.
@@ -1109,7 +1119,7 @@ def get_imports(file_path: str, language: str = "python") -> list[dict]:
 
     Args:
         file_path: Path to source file
-        language: "python", "typescript", "go", or "rust"
+        language: "python", "typescript", "go", "rust", "r", or "elixir"
 
     Returns:
         List of import info dicts. Structure varies by language:
@@ -1117,6 +1127,7 @@ def get_imports(file_path: str, language: str = "python") -> list[dict]:
         - TypeScript: {module, names, is_default, aliases}
         - Go: {module, alias}
         - Rust: {module, names, is_mod}
+        - R: {module, is_source}
 
     Example:
         >>> imports = get_imports("/path/to/file.py", "python")
@@ -1156,6 +1167,8 @@ def get_imports(file_path: str, language: str = "python") -> list[dict]:
         return _parse_luau_imports(file_path)
     elif language == "elixir":
         return _parse_elixir_imports(file_path)
+    elif language == "r":
+        return _parse_r_imports(file_path)
     else:
         raise ValueError(f"Unsupported language: {language}")
 
@@ -1389,9 +1402,23 @@ def search(
 
     # Fallback directories to skip if no ignore_spec provided
     SKIP_DIRS = {
-        "node_modules", "__pycache__", ".git", ".svn", ".hg",
-        "dist", "build", ".next", ".nuxt", "coverage", ".tox",
-        "venv", ".venv", "env", ".env", "vendor", ".cache",
+        "node_modules",
+        "__pycache__",
+        ".git",
+        ".svn",
+        ".hg",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        "coverage",
+        ".tox",
+        "venv",
+        ".venv",
+        "env",
+        ".env",
+        "vendor",
+        ".cache",
     }
 
     results = []
@@ -1562,6 +1589,7 @@ def get_code_structure(
         "elixir": {".ex", ".exs"},
         "lua": {".lua"},
         "luau": {".luau"},
+        "r": {".r", ".R"},
     }
 
     extensions = ext_map.get(language, {".py"})
@@ -1605,7 +1633,9 @@ def get_code_structure(
                     method_name = method.get("name", "")
                     if method_name:
                         methods.append(method_name)  # Plain method name
-                        functions.append(method_name)  # Also in functions for discoverability
+                        functions.append(
+                            method_name
+                        )  # Also in functions for discoverability
 
             file_entry = {
                 "path": str(file_path.relative_to(root)),
@@ -1629,8 +1659,12 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 3:
-        print("Usage: python -m tldr.api <project_path> <entry_point> [depth] [language]")
-        print("Example: python -m tldr.api /path/to/project build_project_call_graph 2 python")
+        print(
+            "Usage: python -m tldr.api <project_path> <entry_point> [depth] [language]"
+        )
+        print(
+            "Example: python -m tldr.api /path/to/project build_project_call_graph 2 python"
+        )
         sys.exit(1)
 
     project_path = sys.argv[1]

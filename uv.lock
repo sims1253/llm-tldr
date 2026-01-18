@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -893,7 +893,7 @@ wheels = [
 
 [[package]]
 name = "llm-tldr"
-version = "1.5.1"
+version = "1.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -942,6 +942,9 @@ dev = [
     { name = "rich" },
     { name = "shtab" },
 ]
+r = [
+    { name = "tree-sitter-r" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -978,12 +981,13 @@ requires-dist = [
     { name = "tree-sitter-luau" },
     { name = "tree-sitter-php", specifier = ">=0.20.0" },
     { name = "tree-sitter-python", specifier = ">=0.23.0" },
+    { name = "tree-sitter-r", marker = "extra == 'r'", git = "https://github.com/r-lib/tree-sitter-r.git?rev=v1.2.0" },
     { name = "tree-sitter-ruby", specifier = ">=0.20.0" },
     { name = "tree-sitter-rust", specifier = ">=0.23.0" },
     { name = "tree-sitter-scala", specifier = ">=0.23.0" },
     { name = "tree-sitter-typescript", specifier = ">=0.23.0" },
 ]
-provides-extras = ["ai", "cli", "dev"]
+provides-extras = ["ai", "cli", "dev", "r"]
 
 [[package]]
 name = "markdown-it-py"
@@ -2988,6 +2992,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ed/a2/996fc2dfa1076dc460d3e2f3c75974ea4b8f02f6bc925383aaae519920e8/tree_sitter_python-0.25.0-cp310-abi3-win_amd64.whl", hash = "sha256:9bcde33f18792de54ee579b00e1b4fe186b7926825444766f849bf7181793a76", size = 76073, upload-time = "2025-09-11T06:47:55.773Z" },
     { url = "https://files.pythonhosted.org/packages/07/19/4b5569d9b1ebebb5907d11554a96ef3fa09364a30fcfabeff587495b512f/tree_sitter_python-0.25.0-cp310-abi3-win_arm64.whl", hash = "sha256:0fbf6a3774ad7e89ee891851204c2e2c47e12b63a5edbe2e9156997731c128bb", size = 74169, upload-time = "2025-09-11T06:47:56.747Z" },
 ]
+
+[[package]]
+name = "tree-sitter-r"
+version = "1.2.0"
+source = { git = "https://github.com/r-lib/tree-sitter-r.git?rev=v1.2.0#e9944e9801595ad484f49be492daf0c4c81547ef" }
 
 [[package]]
 name = "tree-sitter-ruby"
