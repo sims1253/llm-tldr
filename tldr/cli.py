@@ -116,8 +116,14 @@ def _show_first_run_tip():
     marker.touch()
 
 
-def main():
-    _show_first_run_tip()
+def _build_parser():
+    """Build and return the argument parser.
+
+    Returns:
+        argparse.ArgumentParser: The configured argument parser.
+    """
+    import argparse
+
     parser = argparse.ArgumentParser(
         prog="tldr",
         description="Token-efficient code analysis for LLMs",
@@ -567,6 +573,13 @@ Semantic Search:
         help="Install missing tools for language (e.g., python, go)",
     )
     doctor_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    return parser
+
+
+def main():
+    _show_first_run_tip()
+    parser = _build_parser()
 
     args = parser.parse_args()
 

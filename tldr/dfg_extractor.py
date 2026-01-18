@@ -1144,7 +1144,7 @@ class TreeSitterDefUseVisitor:
         ):
             # R: Additional assignment node types from tree-sitter-r
             # equals_assignment: x = value
-            # left_assignment: value -> x (left-to-right assignment)
+            # left_assignment: x <- value (left-to-right assignment)
             # right_assignment: x <- value (right-to-left assignment, but structured differently)
             # Use named fields to get actual operands (not operator tokens)
             var_node = node.child_by_field_name("name")
@@ -1155,9 +1155,9 @@ class TreeSitterDefUseVisitor:
                 named_children = [c for c in node.children if c.is_named]
                 if len(named_children) >= 2:
                     if node_type == "left_assignment":
-                        # Leftward assignment: value -> x (variable is second named child)
-                        value_node = named_children[0]
-                        var_node = named_children[1]
+                        # Leftward assignment: x <- value (variable is first named child)
+                        var_node = named_children[0]
+                        value_node = named_children[1]
                     else:
                         # equals_assignment and right_assignment: variable is first named child
                         var_node = named_children[0]

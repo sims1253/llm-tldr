@@ -3,6 +3,7 @@
 These tests verify specific bugs that were fixed don't regress.
 """
 
+import argparse
 import pytest
 from pathlib import Path
 
@@ -91,11 +92,7 @@ class TestDiagnosticsCodeInjection:
         r_file.write_text("x <- 1\n")
 
         # Result may be empty if lintr not installed, but should not crash
-        # Only catch the specific case where lintr isn't installed
-        try:
-            result = get_diagnostics(str(r_file), "r", include_lint=True)
-        except ImportError:
-            pytest.skip("lintr not installed")
+        result = get_diagnostics(str(r_file), "r", include_lint=True)
         assert isinstance(result, dict)
 
 
@@ -108,25 +105,35 @@ class TestCliAutoSentinel:
 
     def test_lang_default_is_auto(self):
         """The default for --lang should be 'auto', not 'python'."""
-        # Import the CLI module and check the parser configuration
-        from tldr import cli
-        import argparse
+        # Import the CLI module and access the real parser
+        from tldr.cli import _build_parser
 
-        # Get the context parser's --lang argument default
-        # We can verify this by checking the parser setup
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers(dest="command")
-        ctx_p = subparsers.add_parser("context")
-        ctx_p.add_argument("--lang", default="auto")
+        # Build the parser and get the context subparser
+        parser = _build_parser()
 
-        # The fix ensures --lang defaults to "auto" not "python"
-        # We verify the CLI module is loaded and parser is configured correctly
-        # by checking that cli.py defines the right defaults
-        cli_source = open(cli.__file__).read()
+        # Find the context subparser by looking at subparsers
+        subparsers_action = None
+        for action in parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                subparsers_action = action
+                break
 
-        # Verify that the context subparser has --lang default="auto"
-        assert '"auto"' in cli_source or 'default="auto"' in cli_source, (
-            "--lang should default to 'auto'"
+        assert subparsers_action is not None, "No subparsers found in parser"
+
+        # Get the context subparser
+        ctx_p = subparsers_action.choices.get("context")
+        assert ctx_p is not None, "context subparser not found"
+
+        # Find the --lang argument in the context subparser
+        lang_action = None
+        for action in ctx_p._actions:
+            if hasattr(action, "dest") and action.dest == "lang":
+                lang_action = action
+                break
+
+        assert lang_action is not None, "--lang argument not found in context subparser"
+        assert lang_action.default == "auto", (
+            f"--lang should default to 'auto', got '{lang_action.default}'"
         )
 
 
